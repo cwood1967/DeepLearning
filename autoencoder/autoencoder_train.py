@@ -88,7 +88,7 @@ def train(mmdict, df, params):
     opt = network.model_opt(loss, learning_rate)
 
     test_batch, _, _ = utils.getbatch(mmdict, df, len(df) // batchsize,
-                                      batchsize, 32, nchannels,
+                                      batchsize, width, nchannels,
                                       channels=channels)
 
     samp = 26
