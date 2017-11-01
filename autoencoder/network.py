@@ -34,73 +34,129 @@ def dropout(x, is_train, rate):
         x = tf.nn.dropout(x, rate)
     return x
 
-def encoder(images, latent_size, droprate=0.7, is_train=True):
+def layer_conv2d(x, nfilters, size, strides, padding, name,
+                 droprate, is_train):
+
+    z = tf.layers.conv2d(x, nfilters, size, strides=strides,
+                         padding=padding, kernel_initializer=get_init(),
+                         name=name)
+    z = leaky_relu(z)
+    z = dropout(z, is_train, droprate)
+    return z
+
+
+def encoder(images, latent_size, droprate=0.7, is_train=True,
+            nfilters=None):
     print('Encoder', is_train)
     # images = tf.placeholder(tf.float32, (None, height, width, nchannels))
     ## create the model using hte images
-    k = 64 * np.asarray([1, 2, 4, 8], dtype=np.int32)
+    if nfilters is None:
+        k = 64 * np.asarray([1, 2, 4, 8], dtype=np.int32)
+        k = [(64, 5), (128, 3), (256, 3), (512, 3)]
+    else:
+        k = nfilters
+
     #     with tf.variable_scope("encoder", reuse=(not is_train)):
     if 1 == 1:
-        hc1 = tf.layers.conv2d(images, k[0], 5, strides=2, padding="same",
-                               activation=None,
-                               kernel_initializer=get_init(), name='filter_1')
-        hc1 = leaky_relu(hc1)
-        hc1 = dropout(hc1, is_train, droprate)
+        layers = list()
+        layers.append(images)
+        for i, ki in enumerate(k):
+            hc = layer_conv2d(layers[-1], ki[0], ki[1], 2, "same",
+                               "filter_{:02d}".format(i),
+                               droprate, is_train)
+            layers.append(hc)
 
-        hc2 = tf.layers.conv2d(hc1, k[1], 3, strides=2, padding="same",
-                               activation=None,
-                               kernel_initializer=get_init(), name='filter_2')
-        hc2 = leaky_relu(hc2)
-        hc2 = dropout(hc2, is_train, droprate)
-
-        hc3 = tf.layers.conv2d(hc2, k[2], 3, strides=2, padding="same",
-                               activation=tf.nn.elu,
-                               kernel_initializer=get_init(), name='filter_3')
-        hc3 = leaky_relu(hc3)
-        hc3 = dropout(hc3, is_train, droprate)
-
-        h = tf.contrib.layers.flatten(hc3)
+            # hc1 = tf.layers.conv2d(images, k[0], 5, strides=2, padding="same",
+            #                        activation=None,
+            #                        kernel_initializer=get_init(), name='filter_1')
+            # hc1 = leaky_relu(hc1)
+            # hc1 = dropout(hc1, is_train, droprate)
+            #
+            # hc2 = tf.layers.conv2d(hc1, k[1], 3, strides=2, padding="same",
+            #                        activation=None,
+            #                        kernel_initializer=get_init(), name='filter_2')
+            # hc2 = leaky_relu(hc2)
+            # hc2 = dropout(hc2, is_train, droprate)
+            #
+            # hc3 = tf.layers.conv2d(hc2, k[2], 3, strides=2, padding="same",
+            #                        activation=tf.nn.elu,
+            #                        kernel_initializer=get_init(), name='filter_3')
+            # hc3 = leaky_relu(hc3)
+            # hc3 = dropout(hc3, is_train, droprate)
+            #
+        h = tf.contrib.layers.flatten(layers[-1])
         he = tf.layers.dense(h, latent_size, kernel_initializer=get_init(),
                              activation=None,
                              name='latent_space')
 
     return he
 
+def layer_upconv(x, nfilters, size, strides,
+                 padding, tname, droprate, is_train):
 
-def decoder(z, nchannels=2, width=64, droprate=.7, is_train=True):
-    isize = width // 8
-    print(isize, width)
-    k = 32 * np.asarray([1, 2, 4, 8], dtype=np.int32)
+    z = tf.layers.conv2d_transpose(x, nfilters, size, strides=strides,
+                                     padding=padding,
+                                     activation=None,
+                                     kernel_initializer=get_init())
+
+    z = leaky_relu(z)
+    z = dropout(z, is_train, droprate)
+    return z
+
+def decoder(z, nchannels=2, width=64, droprate=.7, is_train=True,
+            nfilters=None):
+
+
+    if nfilters is None:
+        #ks = 32 * np.asarray([1, 2, 4, 8], dtype=np.int32)
+        k = [(256, 3), (128, 3), (64, 3), (32, 5)]
+    else:
+        k = nfilters
+
+    ## size of the first "image"
+    isize = width // int(np.exp2(len(k) - 0))
+    print("isize: ", isize, width)
+
     #     with tf.variable_scope("decoder", reuse=(not is_train)):
     if 1 == 1:
-        dh = tf.layers.dense(z, isize * isize * k[3], activation=None,
+        layers = list()
+        dh = tf.layers.dense(z, isize * isize * k[0][0], activation=None,
                              kernel_initializer=get_init())
         dh = leaky_relu(dh)
-        dropout(dh, is_train, droprate)
+        dh = dropout(dh, is_train, droprate)
+        layers.append(dh)
 
-        dh4 = tf.reshape(dh, (-1, isize, isize, k[3]))
-        dh3 = tf.layers.conv2d_transpose(dh4, k[2], 3, strides=2,
-                                         padding='same',
-                                         activation=None,
-                                         kernel_initializer=get_init())
-        dh3 = leaky_relu(dh3)
-        dh3 = dropout(dh3, is_train, droprate)
+        dh4 = tf.reshape(dh, (-1, isize, isize, k[0][0]))
+        layers.append(dh4)
 
-        dh2 = tf.layers.conv2d_transpose(dh3, k[1], 3, strides=2,
-                                         padding='same',
-                                         activation=None,
-                                         kernel_initializer=get_init())
-        dh2 = leaky_relu(dh2)
-        dh2 = tf.nn.dropout(dh2, .7)
+        for i, ki in enumerate(k):
+            tname = "upconv_{:02d}".format(i)
+            dh  = layer_upconv(layers[-1], ki[0], ki[1], 2, "same",
+                               tname, droprate, is_train)
+            layers.append(dh)
 
-        dh0 = tf.layers.conv2d_transpose(dh2, nchannels, 5, strides=2,
-                                         padding='same',
-                                         activation=None,
-                                         kernel_initializer=get_init(),
-                                         name='decoder_out')
+        # dh3 = tf.layers.conv2d_transpose(dh4, k[2], 3, strides=2,
+        #                                  padding='same',
+        #                                  activation=None,
+        #                                  kernel_initializer=get_init())
+        # dh3 = leaky_relu(dh3)
+        # dh3 = dropout(dh3, is_train, droprate)
+        #
+        # dh2 = tf.layers.conv2d_transpose(dh3, k[1], 3, strides=2,
+        #                                  padding='same',
+        #                                  activation=None,
+        #                                  kernel_initializer=get_init())
+        # dh2 = leaky_relu(dh2)
+        # dh2 = tf.nn.dropout(dh2, .7)
+        #
+        # dh0 = tf.layers.conv2d_transpose(dh2, nchannels, 5, strides=2,
+        #                                  padding='same',
+        #                                  activation=None,
+        #                                  kernel_initializer=get_init(),
+        #                                  name='decoder_out')
 
-        sdh0 = tf.nn.sigmoid(dh0)  # , name='decoder_image')
-
+        sdh0 = tf.nn.sigmoid(layers[-1])  # , name='decoder_image')
+        print(layers)
     return sdh0
 
 
