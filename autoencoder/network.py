@@ -106,7 +106,6 @@ def layer_upconv(x, nfilters, size, strides,
 def decoder(z, nchannels=2, width=64, droprate=.7, is_train=True,
             nfilters=None):
 
-
     if nfilters is None:
         #ks = 32 * np.asarray([1, 2, 4, 8], dtype=np.int32)
         k = [(256, 3), (128, 3), (64, 3), (32, 5)]
@@ -149,13 +148,13 @@ def decoder(z, nchannels=2, width=64, droprate=.7, is_train=True,
         # dh2 = leaky_relu(dh2)
         # dh2 = tf.nn.dropout(dh2, .7)
         #
-        # dh0 = tf.layers.conv2d_transpose(dh2, nchannels, 5, strides=2,
-        #                                  padding='same',
-        #                                  activation=None,
-        #                                  kernel_initializer=get_init(),
-        #                                  name='decoder_out')
+        dh0 = tf.layers.conv2d_transpose(layers[-1], nchannels, 5, strides=2,
+                                         padding='same',
+                                         activation=None,
+                                         kernel_initializer=get_init(),
+                                         name='decoder_out')
 
-        sdh0 = tf.nn.sigmoid(layers[-1])  # , name='decoder_image')
+        sdh0 = tf.nn.sigmoid(dh0)  # , name='decoder_image')
         print(layers)
     return sdh0
 
