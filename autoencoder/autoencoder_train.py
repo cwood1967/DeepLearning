@@ -74,13 +74,16 @@ def train(mmdict, df, params):
     learning_rate = params['learning_rate']
     restore = params['restore']
     latent_size = params['latent_size']
+    enc_sizes = params['enc_sizes']
+    dec_sizes = params['dec_sizes']
 
     images = tf.placeholder(tf.float32, (None, height, width, nchannels))
     z = tf.placeholder(tf.float32, (None, latent_size))
 
-    enc = network.encoder(images, latent_size, droprate=.7, is_train=True)
+    enc = network.encoder(images, latent_size, droprate=.7, is_train=True,
+                          nfilters=enc_sizes)
     sdd = network.decoder(enc, nchannels=nchannels, width=width, droprate=.7,
-                          is_train=True)
+                          is_train=True, nfilters=dec_sizes)
 
     loss = network.ae_loss(images, sdd, nchannels=nchannels,
                            latent_size=latent_size, width=width)
@@ -164,6 +167,9 @@ if __name__ == '__main__':
     p_restore = False
     p_latent_size = 128
 
+    enc_sizes = [(32, 7), (64, 5), (128, 3), (256, 3)]
+    dec_sizes = list(reversed(enc_sizes))
+
     params = dict()
 
     params['width'] = p_width
@@ -175,6 +181,8 @@ if __name__ == '__main__':
     params['learning_rate'] = p_learning_rate
     params['restore'] = p_restore
     params['latent_size'] = p_latent_size
+    params['enc_sizes'] = enc_sizes
+    params['dec_sizes'] = dec_sizes
 
     train(p_mmdict, p_df, params)
 

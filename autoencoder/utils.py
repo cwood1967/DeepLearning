@@ -15,6 +15,8 @@ def read_data_file(datafile):
     df['mmfile'] = mmfile
     return df
 
+def clean_mmfilename(df):
+    mmcol = df['mmfile']
 
 def getXY(mmdict, df, rowid, size):
     row = df[df['id'] == rowid].iloc[0]
