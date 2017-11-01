@@ -35,11 +35,11 @@ def dropout(x, is_train, rate):
     return x
 
 def layer_conv2d(x, nfilters, size, strides, padding, name,
-                 droprate, is_train):
+                 droprate, is_train, activation=None):
 
     z = tf.layers.conv2d(x, nfilters, size, strides=strides,
                          padding=padding, kernel_initializer=get_init(),
-                         name=name)
+                         name=name, activation=activation)
     z = leaky_relu(z)
     z = dropout(z, is_train, droprate)
     return z
@@ -61,9 +61,13 @@ def encoder(images, latent_size, droprate=0.7, is_train=True,
         layers = list()
         layers.append(images)
         for i, ki in enumerate(k):
+            if i == 2:
+                av = tf.nn.elu
+            else:
+                av = None
             hc = layer_conv2d(layers[-1], ki[0], ki[1], 2, "same",
                                "filter_{:02d}".format(i),
-                               droprate, is_train)
+                               droprate, is_train, activation=av)
             layers.append(hc)
 
             # hc1 = tf.layers.conv2d(images, k[0], 5, strides=2, padding="same",
