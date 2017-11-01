@@ -125,14 +125,17 @@ def decoder(z, nchannels=2, width=64, droprate=.7, is_train=True,
         dh = dropout(dh, is_train, droprate)
         layers.append(dh)
 
-        dh4 = tf.reshape(dh, (-1, isize, isize, k[0][0]))
-        layers.append(dh4)
+
 
         for i, ki in enumerate(k):
-            tname = "upconv_{:02d}".format(i)
-            dh  = layer_upconv(layers[-1], ki[0], ki[1], 2, "same",
-                               tname, droprate, is_train)
-            layers.append(dh)
+            if i == 0:
+                dh = tf.reshape(layers[-1], (-1, isize, isize, k[0][0]))
+                layers.append(dh)
+            else:
+                tname = "upconv_{:02d}".format(i)
+                dh  = layer_upconv(layers[-1], ki[0], ki[1], 2, "same",
+                                   tname, droprate, is_train)
+                layers.append(dh)
 
         # dh3 = tf.layers.conv2d_transpose(dh4, k[2], 3, strides=2,
         #                                  padding='same',
