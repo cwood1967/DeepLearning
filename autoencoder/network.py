@@ -155,7 +155,7 @@ def decoder(z, nchannels=2, width=64, droprate=.7, is_train=True,
                                          name='decoder_out')
 
         sdh0 = tf.nn.sigmoid(dh0)  # , name='decoder_image')
-        print(layers)
+        print(layers, dh0)
     return sdh0
 
 
