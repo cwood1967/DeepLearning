@@ -55,7 +55,7 @@ to create the dataframe
 '''
 
 
-def train(mmdict, df, params):
+def train(mmdict, df, params, ndisp):
     """Train the autoencoder neural network and save the results
     
     Arguments:
@@ -121,7 +121,7 @@ def train(mmdict, df, params):
 
                     ni = np.random.randint(0, batchsize)
 
-                    if ib % 1000 == 0:
+                    if ib % ndisp == 0:
                         sdh0r = asdd[ni]
                         test_he = sess.run(enc, feed_dict={images: test_batch})
                         test_sdd = sess.run(sdd, feed_dict={enc: test_he,
@@ -169,7 +169,7 @@ if __name__ == '__main__':
 
     enc_sizes = [(32, 7), (64, 5), (128, 3), (256, 3)]
     dec_sizes = list(reversed(enc_sizes))
-
+    dec_sizes.append((1, 7))
     params = dict()
 
     params['width'] = p_width
