@@ -1,5 +1,5 @@
 
-
+import sys
 import warnings
 from distutils.version import LooseVersion
 
@@ -7,7 +7,7 @@ import numpy as np
 import tensorflow as tf
 from matplotlib import pyplot as plt
 
-#import sys
+
 
 # print(sys.path)
 import network
@@ -55,7 +55,13 @@ to create the dataframe
 '''
 
 
-def train(mmdict, params):
+def train(mmdict, df, params):
+    """Train the autoencoder neural network and save the results
+    
+    Arguments:
+        mmdict -- dictionary of memory map files
+        params -- dictionay of parameters
+    """
 
     tf.reset_default_graph()
 
@@ -133,22 +139,20 @@ def train(mmdict, params):
     print("Done")
 
 if __name__ == '__main__':
+
     datadir = "/Users/cjw/Projects/cjw/yeastAE/Data/yeast/"
     datafile = datadir + "plate15_cells.csv"
-    df = utils.read_data_file(datafile)
+    p_df = utils.read_data_file(datafile)
     mmfilename = datadir + "mmplate15-1.mm"
     mm = np.memmap(mmfilename, dtype='int32', mode='r',
                    shape=(4,))
     mmshape = mm.shape
-    # print(mmshape)
     xshape = (mm[0], mm[1], mm[2], mm[3])
     del mm
-    # mmshape, xshape
-
 
     m2 = np.memmap(mmfilename, dtype='float32', offset=128,
                    mode='r', shape=xshape)
-    p_mmdict = {"mmplate15-1.mm":m2}
+    p_mmdict = {"mmplate15-1.mm": m2}
 
     p_width = 32
     p_height = 32
@@ -161,6 +165,7 @@ if __name__ == '__main__':
     p_latent_size = 128
 
     params = dict()
+
     params['width'] = p_width
     params['height'] = p_height
     params['nchannels'] = p_nchannels
@@ -171,7 +176,7 @@ if __name__ == '__main__':
     params['restore'] = p_restore
     params['latent_size'] = p_latent_size
 
-    train(p_mmdict, params)
+    train(p_mmdict, p_df, params)
 
 
 
