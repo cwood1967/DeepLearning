@@ -88,7 +88,7 @@ def encoder(images, latent_size, droprate=0.7, is_train=True,
         he = tf.layers.dense(h, latent_size, kernel_initializer=get_init(),
                              activation=None,
                              name='latent_space')
-
+        print(layers, he)
     return he
 
 def layer_upconv(x, nfilters, size, strides,
