@@ -59,3 +59,36 @@ def getbatch(mmdict, df, start, batchsize, size, nchannels, channels=None):
         batch[i] = z
     wells = np.asarray(wells)
     return batch, wells, rownums
+
+
+def getWell(mmdict, df, size, row, column, nchannels, channels=None):
+    if channels is None:
+        channels = np.arange(nchannels)
+
+    welldf = df[df['row'] == row]
+    welldf = welldf[welldf['column'] == column]
+    dfsize = len(welldf)
+
+    images = np.zeros((dfsize, size, size, nchannels))
+    for i, (index, irow) in enumerate(welldf.iterrows()):
+        rid = irow['id']
+        fid = irow['fid']
+        xc = irow['xc']
+        yc = irow['yc']
+        x = int(xc) - size // 2
+        y = int(yc) - size // 2
+        mfile = mmdict[irow['mmfile'].strip()]
+
+        shape = mfile.shape
+        if x < 0:
+            x = 0
+        if y < 0:
+            y = 0
+        if x > (shape[2] - size):
+            x = shape[2] - size
+        if y > (shape[1] - size):
+            y = shape[1] - size
+
+        z = mfile[fid][y:y + size, x:x + size, channels]
+        images[i] = z
+    return images
