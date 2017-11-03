@@ -85,11 +85,11 @@ def encoder(images, latent_size, droprate=0.7, is_train=True,
             # hc3 = dropout(hc3, is_train, droprate)
             #
         h = tf.contrib.layers.flatten(layers[-1])
-        he0 = tf.layers.dense(h, 2*latent_size, kernel_initializer=get_init(),
-                             activation=None,
-                             name='dense_layer')
-        he0 = leaky_relu(he0)
-        he0 = dropout(he0, is_train, droprate)
+        # he0 = tf.layers.dense(h, 2*latent_size, kernel_initializer=get_init(),
+        #                      activation=None,
+        #                      name='dense_layer')
+        # he0 = leaky_relu(he0)
+        # he0 = dropout(he0, is_train, droprate)
 
         he = tf.layers.dense(he0, latent_size, kernel_initializer=get_init(),
                              activation=None,
