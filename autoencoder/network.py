@@ -15,7 +15,7 @@ def clipped_u(x, clip=2.):
 
 
 def get_init():
-    return tf.truncated_normal_initializer(stddev=.01)
+    return tf.truncated_normal_initializer(stddev=.1)
 
 
 def get_reg():
