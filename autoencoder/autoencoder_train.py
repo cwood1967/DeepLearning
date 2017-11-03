@@ -77,6 +77,8 @@ def train(mmdict, df, params, ndisp):
     enc_sizes = params['enc_sizes']
     dec_sizes = params['dec_sizes']
 
+    savename = "autoencoder-{:d}x".format(latent_size)
+
     images = tf.placeholder(tf.float32, (None, height, width, nchannels))
     z = tf.placeholder(tf.float32, (None, latent_size))
 
@@ -138,7 +140,7 @@ def train(mmdict, df, params, ndisp):
                     start += 1
                     if ib > 2000000:
                         break
-                saver.save(sess, 'autoencoder-128x', global_step=counter)
+                saver.save(sess, savename, global_step=counter)
     print("Done")
 
 if __name__ == '__main__':
