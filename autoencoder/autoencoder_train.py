@@ -76,15 +76,17 @@ def train(mmdict, df, params, ndisp):
     latent_size = params['latent_size']
     enc_sizes = params['enc_sizes']
     dec_sizes = params['dec_sizes']
+    droprate = params['droprate']
 
     savename = "autoencoder-{:d}x".format(latent_size)
 
     images = tf.placeholder(tf.float32, (None, height, width, nchannels))
     z = tf.placeholder(tf.float32, (None, latent_size))
 
-    enc = network.encoder(images, latent_size, droprate=.7, is_train=True,
+    enc = network.encoder(images, latent_size, droprate=droprate, is_train=True,
                           nfilters=enc_sizes)
-    sdd = network.decoder(enc, nchannels=nchannels, width=width, droprate=.7,
+    sdd = network.decoder(enc, nchannels=nchannels, width=width,
+                          droprate=droprate,
                           is_train=True, nfilters=dec_sizes)
 
     loss = network.ae_loss(images, sdd, nchannels=nchannels,
