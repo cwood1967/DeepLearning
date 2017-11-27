@@ -2,6 +2,8 @@
 import sys
 import warnings
 from distutils.version import LooseVersion
+import time
+import os
 
 import numpy as np
 import tensorflow as tf
@@ -78,7 +80,9 @@ def train(mmdict, df, params, ndisp):
     dec_sizes = params['dec_sizes']
     droprate = params['droprate']
 
-    savename = "autoencoder-{:d}x".format(latent_size)
+    savedir = time.strftime("checkpoint-%Y-%m-%d%H-%M-%S")
+    os.mkdir(savedir)
+    savename = savedir + "autoencoder-{:d}x".format(latent_size)
 
     images = tf.placeholder(tf.float32, (None, height, width, nchannels))
     z = tf.placeholder(tf.float32, (None, latent_size))
