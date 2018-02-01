@@ -19,7 +19,8 @@ def clean_mmfilename(df):
     mmcol = df['mmfile']
 
 def getXY(mmdict, df, rowid, size):
-    row = df[df['id'] == rowid].iloc[0]
+    rowd = df[df['id'] == rowid]
+    row = rowd.iloc[0]
     fid = int(row['fid'])
     xc = row['xc']
     yc = row['yc']
@@ -48,8 +49,8 @@ def getbatch(mmdict, df, start, batchsize, size, nchannels, channels=None):
     dx = dfsize//batchsize
     rownums = np.linspace(start, start + dx*(batchsize - 1), batchsize,
                           dtype=np.int32)
-#    print(len(rownums))
-#    print(rownums)
+    #print(len(rownums))
+    #print(rownums)
     batch = np.zeros((batchsize, size, size, nchannels))
     wells = []
     for i, v in enumerate(rownums):

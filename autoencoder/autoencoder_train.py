@@ -80,9 +80,9 @@ def train(mmdict, df, params, ndisp):
     dec_sizes = params['dec_sizes']
     droprate = params['droprate']
 
-    savedir = time.strftime("checkpoint-%Y-%m-%d%H-%M-%S")
+    savedir = time.strftime("checkpoint-%Y-%m-%d-%H-%M-%S")
     os.mkdir(savedir)
-    savename = savedir + "autoencoder-{:d}x".format(latent_size)
+    savename = savedir + "/" + "autoencoder-{:d}x".format(latent_size)
 
     images = tf.placeholder(tf.float32, (None, height, width, nchannels))
     z = tf.placeholder(tf.float32, (None, latent_size))
