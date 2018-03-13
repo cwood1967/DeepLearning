@@ -7,6 +7,17 @@ def sampling(z_mean, z_log_sigma, batchsize, length):
 
 
 def leaky_relu(x, alpha=0.2):
+    """
+    Calculate activation with leaky Relu
+    Parameters
+    ----------
+    x : tensor
+    alpha : float
+
+    Returns
+    -------
+    Activation value
+    """
     return tf.maximum(x * alpha, x)
 
 
@@ -15,6 +26,12 @@ def clipped_u(x, clip=2.):
 
 
 def get_init():
+    """
+    Create a layer initializer
+    Returns
+    -------
+    Normal initializer
+    """
     return tf.truncated_normal_initializer(stddev=.04)
 
 
@@ -30,6 +47,21 @@ def dud():
         pass
 
 def dropout(x, is_train, rate):
+    """
+    Perform dropout on the input tensor
+    Parameters
+    ----------
+    x : tensor
+        Input tensor
+    is_train : boolean
+        True if training
+    rate : float
+        Keep probability
+
+    Returns
+    -------
+
+    """
     if is_train:
         x = tf.nn.dropout(x, rate)
     return x
@@ -128,6 +160,32 @@ def encoder(images, latent_size, droprate=0.7, is_train=True,
 
 def layer_upconv(x, nfilters, size, strides,
                  padding, tname, droprate, is_train):
+    """
+    Create a layer for the decoder, up-scale the tensor
+    
+    Parameters
+    ----------
+    x : tensor
+    nfilters : int
+        number of filter layers
+    size : int
+        size of the filter kernel
+    strides : int
+        length of convolution stride
+    padding : str
+        Type of padding
+    tname : str
+        variable name
+    droprate : float
+        Keep probability
+    is_train : boolean
+        True if for training
+
+    Returns
+    -------
+    z : tensor
+    
+    """
 
     z = tf.layers.conv2d_transpose(x, nfilters, size, strides=strides,
                                      padding=padding,
@@ -172,20 +230,6 @@ def decoder(z, nchannels=2, width=64, droprate=.7, is_train=True,
                                    tname, droprate, is_train)
                 layers.append(dh)
 
-        # dh3 = tf.layers.conv2d_transpose(dh4, k[2], 3, strides=2,
-        #                                  padding='same',
-        #                                  activation=None,
-        #                                  kernel_initializer=get_init())
-        # dh3 = leaky_relu(dh3)
-        # dh3 = dropout(dh3, is_train, droprate)
-        #
-        # dh2 = tf.layers.conv2d_transpose(dh3, k[1], 3, strides=2,
-        #                                  padding='same',
-        #                                  activation=None,
-        #                                  kernel_initializer=get_init())
-        # dh2 = leaky_relu(dh2)
-        # dh2 = tf.nn.dropout(dh2, .7)
-        #
         dh0 = tf.layers.conv2d_transpose(layers[-1], nchannels, 5, strides=2,
                                          padding='same',
                                          activation=None,
@@ -197,9 +241,21 @@ def decoder(z, nchannels=2, width=64, droprate=.7, is_train=True,
     return sdh0
 
 
-def ae_loss(images, sdh0, nchannels=1, latent_size=32, is_train=True,
-             width=64):
-
+def ae_loss(images, sdh0):
+    """
+    Calculate the loss, just [input image] - [decoded image]
+    Parameters
+    ----------
+    images : tensor
+        Input images
+    sdh0 : tensor
+        Decoded images
+    
+    Returns
+    -------
+    loss : float
+        The reduced loss over all samples
+    """
 #    xloss = -tf.reduce_sum(images * tf.log(sdh0) +
 #                          (1 - images) * tf.log(1 - sdh0), (1, 2, 3))
 
