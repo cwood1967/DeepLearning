@@ -36,6 +36,33 @@ def dropout(x, is_train, rate):
 
 def layer_conv2d(x, nfilters, size, strides, padding, name,
                  droprate, is_train, activation=None):
+    """
+    Create a 2D convolutional layer
+    
+    Parameters
+    ----------
+    x : Tensor
+    nfilters : int
+        Number of filter layer
+    size: int
+        Size of the filter kernel
+    strides : int
+        Stride length of the kernel
+    padding : str
+        How to do the padding on the edges
+    name : str
+        name of the tensorflow variable
+    droprate : float
+        keep probability
+    is_train : boolean
+        True is doing training
+    activation : function
+        activation function
+
+    Returns
+    -------
+    z : tensor
+    """
 
     z = tf.layers.conv2d(x, nfilters, size, strides=strides,
                          padding=padding, kernel_initializer=get_init(),
@@ -47,9 +74,32 @@ def layer_conv2d(x, nfilters, size, strides, padding, name,
 
 def encoder(images, latent_size, droprate=0.7, is_train=True,
             nfilters=None):
+    """
+    Build the encoder part of th neural network
+    
+    Parameters
+    ----------
+    images : numpy.array
+        batch of images
+    latent_size : int
+        size of the final layer
+    droprate : float
+        keep probability
+    is_train : boolean
+        running as training or inference
+    nfilters : list
+        list of (stack size, filter size)
+
+    Returns
+    -------
+    he : Tensor
+        fully connected layer of size (batchsize, layer_layer_size)
+        
+    """
     print('Encoder', is_train)
     # images = tf.placeholder(tf.float32, (None, height, width, nchannels))
-    ## create the model using hte images
+
+    """create the model using the images"""
     if nfilters is None:
         k = 64 * np.asarray([1, 2, 4, 8], dtype=np.int32)
         k = [(64, 5), (128, 3), (256, 3), (512, 3)]
@@ -61,35 +111,14 @@ def encoder(images, latent_size, droprate=0.7, is_train=True,
         layers = list()
         layers.append(images)
         for i, ki in enumerate(k):
+            """Use the last element on the layers list"""
             hc = layer_conv2d(layers[-1], ki[0], ki[1], 2, "same",
                                "filter_{:02d}".format(i),
                                droprate, is_train, activation=None)
             layers.append(hc)
 
-            # hc1 = tf.layers.conv2d(images, k[0], 5, strides=2, padding="same",
-            #                        activation=None,
-            #                        kernel_initializer=get_init(), name='filter_1')
-            # hc1 = leaky_relu(hc1)
-            # hc1 = dropout(hc1, is_train, droprate)
-            #
-            # hc2 = tf.layers.conv2d(hc1, k[1], 3, strides=2, padding="same",
-            #                        activation=None,
-            #                        kernel_initializer=get_init(), name='filter_2')
-            # hc2 = leaky_relu(hc2)
-            # hc2 = dropout(hc2, is_train, droprate)
-            #
-            # hc3 = tf.layers.conv2d(hc2, k[2], 3, strides=2, padding="same",
-            #                        activation=tf.nn.elu,
-            #                        kernel_initializer=get_init(), name='filter_3')
-            # hc3 = leaky_relu(hc3)
-            # hc3 = dropout(hc3, is_train, droprate)
-            #
+
         h = tf.contrib.layers.flatten(layers[-1])
-        # he0 = tf.layers.dense(h, 2*latent_size, kernel_initializer=get_init(),
-        #                      activation=None,
-        #                      name='dense_layer')
-        # he0 = leaky_relu(he0)
-        # he0 = dropout(he0, is_train, droprate)
 
         he = tf.layers.dense(h, latent_size, kernel_initializer=get_init(),
                              activation=None,
