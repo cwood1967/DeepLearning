@@ -1,3 +1,6 @@
+import os
+import glob
+
 import numpy as np
 import pandas as pd
 
@@ -93,3 +96,13 @@ def getWell(mmdict, df, size, row, column, nchannels, channels=None):
         z = mfile[fid][y:y + size, x:x + size, channels]
         images[i] = z
     return images
+
+def create_mm_dataframe(mmfiles_dict):
+    pass
+
+def list_mmfiles(dir):
+    if not dir.endswith("/"):
+        dir += "/"
+        
+    mmfiles = glob.glob(dir + "*" + ".mm")
+    return mmfiles

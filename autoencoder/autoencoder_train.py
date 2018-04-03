@@ -49,7 +49,7 @@ def display(sess, x1, x2, x3, x4, x5, x6, p1, p2, p3, p4):
     plt.plot(p1)
     plt.plot(p2)
     plt.plot(p3, color='red')
-    plt.plot(p4, color='black')
+    #plt.plot(p4, color='black')
     plt.show()
 
 ''' need to have the data file, a csv file with x, y, etc

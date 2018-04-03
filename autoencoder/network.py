@@ -56,7 +56,6 @@ def encoder(images, latent_size, droprate=0.7, is_train=True,
     else:
         k = nfilters
 
-    #     with tf.variable_scope("encoder", reuse=(not is_train)):
     if 1 == 1:
         layers = list()
         layers.append(images)
@@ -66,31 +65,7 @@ def encoder(images, latent_size, droprate=0.7, is_train=True,
                                droprate, is_train, activation=None)
             layers.append(hc)
 
-            # hc1 = tf.layers.conv2d(images, k[0], 5, strides=2, padding="same",
-            #                        activation=None,
-            #                        kernel_initializer=get_init(), name='filter_1')
-            # hc1 = leaky_relu(hc1)
-            # hc1 = dropout(hc1, is_train, droprate)
-            #
-            # hc2 = tf.layers.conv2d(hc1, k[1], 3, strides=2, padding="same",
-            #                        activation=None,
-            #                        kernel_initializer=get_init(), name='filter_2')
-            # hc2 = leaky_relu(hc2)
-            # hc2 = dropout(hc2, is_train, droprate)
-            #
-            # hc3 = tf.layers.conv2d(hc2, k[2], 3, strides=2, padding="same",
-            #                        activation=tf.nn.elu,
-            #                        kernel_initializer=get_init(), name='filter_3')
-            # hc3 = leaky_relu(hc3)
-            # hc3 = dropout(hc3, is_train, droprate)
-            #
         h = tf.contrib.layers.flatten(layers[-1])
-        # he0 = tf.layers.dense(h, 2*latent_size, kernel_initializer=get_init(),
-        #                      activation=None,
-        #                      name='dense_layer')
-        # he0 = leaky_relu(he0)
-        # he0 = dropout(he0, is_train, droprate)
-
         he = tf.layers.dense(h, latent_size, kernel_initializer=get_init(),
                              activation=None,
                              name='latent_space')
