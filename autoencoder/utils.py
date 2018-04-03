@@ -1,11 +1,28 @@
+
 import os
 import glob
+
+"""Utility functions to help with deep learning"""
 
 import numpy as np
 import pandas as pd
 
 
 def read_data_file(datafile):
+    """
+    Read the csv file that describes each image/patch
+    Parameters
+    ----------
+    datafile : str
+        Location of the datafile
+
+    Returns
+    -------
+    df : DataFrame
+        Pandas dataframe of the csv file
+    """
+
+    """Name for the columns of the DataFrame"""
     names = ['id', 'fid', 'file', 'mmfile', 'plate', 'row', 'column',
              'field', 'yc', 'xc']
 
@@ -14,6 +31,7 @@ def read_data_file(datafile):
     maxrow = df['row'].max()
     well = maxrow*(df['column'] - 1) + df['row'] - 1
     df['well'] = well
+    """Get rid of the home directory in the mmfile path"""
     mmfile = mmfile.str.replace("/Users/cjw/", '')
     df['mmfile'] = mmfile
     return df
@@ -22,6 +40,26 @@ def clean_mmfilename(df):
     mmcol = df['mmfile']
 
 def getXY(mmdict, df, rowid, size):
+    """
+    Get the X and Y (and some other things) coordinates for row rowid of the dataframe
+    
+    Parameters
+    ----------
+    mmdict : dictionary of mmfiles
+    df : the dataframe
+    rowid : row interest in the dataframe
+    size : size of the image patch
+
+    Returns
+    -------
+    tuple : (mfile, fid, x, y, well)
+        mfile: memmap file
+        fid : file id form dataframe
+        x : x coordinate
+        y : y coordinate
+        well: what well the image is in
+        
+    """
     rowd = df[df['id'] == rowid]
     row = rowd.iloc[0]
     fid = int(row['fid'])
@@ -46,6 +84,34 @@ def getXY(mmdict, df, rowid, size):
 
 
 def getbatch(mmdict, df, start, batchsize, size, nchannels, channels=None):
+    """
+    Get a batch of images for training or inference
+    
+    Parameters
+    ----------
+    mmdict : dict
+        memmap dictionary
+    df : dataframe
+    start : int
+        start position in the list of patches
+    batchsize : int
+        number of patched to return
+    size : int
+        size (width) of each image patch
+    nchannels : int
+        number of channels to return
+    channels : np.array
+        list of channels to return
+
+    Returns
+    -------
+    tuple (batch, well, rownums)
+        batch : array of the batch of images
+        wells : list of what well each image is in
+        rownums : row from the dataframe for each image
+    """
+
+
     if channels is None:
         channels = np.arange(nchannels)
     dfsize = len(df)
@@ -66,6 +132,31 @@ def getbatch(mmdict, df, start, batchsize, size, nchannels, channels=None):
 
 
 def getWell(mmdict, df, size, row, column, nchannels, channels=None):
+    """
+    Get every image patch in a well
+    
+    Parameters
+    ----------
+    mmdict : dict
+        dictionary of memmap file
+    df : DataFrame
+    size : int
+        size of image patches
+    row : int
+        row in the plate
+    column: int
+        column in the plate
+    nchannels : int
+        number of channels
+    channels : np.array
+        list of channels for the batch
+        
+
+    Returns
+    -------
+        images : numpy array of the images
+    """
+
     if channels is None:
         channels = np.arange(nchannels)
 
