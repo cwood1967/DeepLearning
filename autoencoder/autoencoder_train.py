@@ -52,6 +52,47 @@ def display(sess, x1, x2, x3, x4, x5, x6, p1, p2, p3, p4):
     #plt.plot(p4, color='black')
     plt.show()
 
+
+def showrow(fig, g, b, s, start):
+    sy, sx = s
+    
+    counter = 0
+    for i in range(g[0].shape[-1]):
+        fig.add_subplot(sy,sx,start + counter)
+        plt.imshow(g[:,:,i])
+        counter += 1
+    '''
+    fig.add_subplot(sy, sx, start + 1)
+    plt.imshow(g[:,:,1])
+    fig.add_subplot(sy, sx, start + 2)
+    plt.imshow(g[:,:,2])
+    '''
+    
+    for i in range(b[0].shape[-1]):
+        fig.add_subplot(sy,sx,start + counter)
+        plt.imshow(b[:,:,i])
+        counter += 1
+        
+    '''
+    fig.add_subplot(sy, sx, start + 4)
+    plt.imshow(b[:,:,1])
+    fig.add_subplot(sy, sx, start + 5)
+    plt.imshow(b[:,:,2])
+    '''
+    
+def display2(sess, g, b, plots):
+    f = plt.figure(figsize=(12, 4))
+    
+    x = 1
+    for i in range(len(g)):
+        showrow(f, g[i], b[i], (len(g) + 1,2*g[i].shape[-1]), x)
+        x += 2*g[i].shape[-1]
+   
+    plt.subplot(len(g) + 1, 1, len(g) + 1)
+    for p in plots:
+        plt.plot(p)
+    plt.show()
+             
 ''' need to have the data file, a csv file with x, y, etc
 to create the dataframe
 '''
@@ -93,8 +134,7 @@ def train(mmdict, df, params, ndisp):
                           droprate=droprate,
                           is_train=True, nfilters=dec_sizes)
 
-    loss = network.ae_loss(images, sdd, nchannels=nchannels,
-                           latent_size=latent_size, width=width)
+    loss = network.ae_loss(images, sdd)
 
     opt = network.model_opt(loss, learning_rate)
 
@@ -136,11 +176,24 @@ def train(mmdict, df, params, ndisp):
                                                             images: test_batch})
 
                         print('Epoch: ', e, 'Iteration: ', ib, 'Loss: ', az)
+                        '''
                         display(sess, sdh0r[:, :, 0], batch[ni, :, :, 0],
                                 test_sdd[ni, :, :, 0], test_batch[ni, :, :, 0],
                                 test_sdd[23, :, :, 0], test_batch[23, :, :, 0],
                                 test_he[ni], aenc[ni],
                                 test_he[23], test_he[0])
+                        '''
+                        
+                        gd = [sdh0r[:, :, :], test_sdd[ni, :, :, :], test_sdd[23, :, :, :]]
+                        bd = [batch[ni, :, :, :], test_batch[ni, :, :, :], test_batch[23, :, :, :]]
+                        pd = [aenc[ni],  test_he[ni], test_he[23]]
+                        display2(sess, gd, bd, pd)
+                        '''
+                        display2(sess, sdh0r[:, :, :], batch[ni, :, :, :],
+                                test_sdd[ni, :, :, :], test_batch[ni, :, :, :],
+                                test_sdd[23, :, :, :], test_batch[23, :, :, :])
+                        '''
+                        
                     ib += 1
                     counter += 1
                     start += 1

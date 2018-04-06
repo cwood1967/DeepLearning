@@ -32,7 +32,7 @@ def get_init():
     -------
     Normal initializer
     """
-    return tf.truncated_normal_initializer(stddev=.04)
+    return tf.truncated_normal_initializer(stddev=.04) #.04
 
 
 def get_reg():
