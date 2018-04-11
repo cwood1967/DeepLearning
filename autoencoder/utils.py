@@ -61,6 +61,9 @@ def getXY(mmdict, df, rowid, size):
         
     """
     rowd = df[df['id'] == rowid]
+    if len(rowd) == 0:
+        print(len(rowd), rowid)
+        
     row = rowd.iloc[0]
     fid = int(row['fid'])
     xc = row['xc']

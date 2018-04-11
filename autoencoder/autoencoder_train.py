@@ -98,7 +98,7 @@ to create the dataframe
 '''
 
 
-def train(mmdict, df, params, ndisp):
+def train(mmdict, df, params, ndisp, saveto=None):
     """Train the autoencoder neural network and save the results
     
     Arguments:
@@ -121,7 +121,13 @@ def train(mmdict, df, params, ndisp):
     dec_sizes = params['dec_sizes']
     droprate = params['droprate']
 
-    savedir = time.strftime("checkpoint-%Y-%m-%d-%H-%M-%S")
+    if saveto is None:
+        saveto = ""
+    else:
+        if not saveto.endswith("/"):
+            saveto += "/"
+           
+    savedir = saveto + time.strftime("checkpoint-%Y-%m-%d-%H-%M-%S")
     os.mkdir(savedir)
     savename = savedir + "/" + "autoencoder-{:d}x".format(latent_size)
 
@@ -137,8 +143,8 @@ def train(mmdict, df, params, ndisp):
     loss = network.ae_loss(images, sdd)
 
     opt = network.model_opt(loss, learning_rate)
-
-    test_batch, _, _ = utils.getbatch(mmdict, df, len(df) // batchsize,
+    print(len(df), len(df)//batchsize, batchsize)
+    test_batch, _, _ = utils.getbatch(mmdict, df, len(df) // batchsize - 1,
                                       batchsize, width, nchannels,
                                       channels=channels)
 
@@ -179,19 +185,19 @@ def train(mmdict, df, params, ndisp):
                         '''
                         display(sess, sdh0r[:, :, 0], batch[ni, :, :, 0],
                                 test_sdd[ni, :, :, 0], test_batch[ni, :, :, 0],
-                                test_sdd[23, :, :, 0], test_batch[23, :, :, 0],
+                                test_sdd[4, :, :, 0], test_batch[4, :, :, 0],
                                 test_he[ni], aenc[ni],
-                                test_he[23], test_he[0])
+                                test_he[4], test_he[0])
                         '''
                         
-                        gd = [sdh0r[:, :, :], test_sdd[ni, :, :, :], test_sdd[23, :, :, :]]
-                        bd = [batch[ni, :, :, :], test_batch[ni, :, :, :], test_batch[23, :, :, :]]
-                        pd = [aenc[ni],  test_he[ni], test_he[23]]
+                        gd = [sdh0r[:, :, :], test_sdd[ni, :, :, :], test_sdd[4, :, :, :]]
+                        bd = [batch[ni, :, :, :], test_batch[ni, :, :, :], test_batch[4, :, :, :]]
+                        pd = [aenc[ni],  test_he[ni], test_he[4]]
                         display2(sess, gd, bd, pd)
                         '''
                         display2(sess, sdh0r[:, :, :], batch[ni, :, :, :],
                                 test_sdd[ni, :, :, :], test_batch[ni, :, :, :],
-                                test_sdd[23, :, :, :], test_batch[23, :, :, :])
+                                test_sdd[4, :, :, :], test_batch[4, :, :, :])
                         '''
                         
                     ib += 1
