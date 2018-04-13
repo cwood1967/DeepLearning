@@ -25,14 +25,14 @@ def clipped_u(x, clip=2.):
     return tf.clip_by_value(x, -clip, clip)
 
 
-def get_init():
+def get_init(stdev):
     """
     Create a layer initializer
     Returns
     -------
     Normal initializer
     """
-    return tf.truncated_normal_initializer(stddev=.04) #.04
+    return tf.truncated_normal_initializer(stddev=stdev) #.04
 
 
 def get_reg():
@@ -66,7 +66,7 @@ def dropout(x, is_train, rate):
         x = tf.nn.dropout(x, rate)
     return x
 
-def layer_conv2d(x, nfilters, size, strides, padding, name,
+def layer_conv2d(x, nfilters, size, strides, padding, name, stdev,
                  droprate, is_train, activation=None):
     """
     Create a 2D convolutional layer
@@ -97,7 +97,7 @@ def layer_conv2d(x, nfilters, size, strides, padding, name,
     """
 
     z = tf.layers.conv2d(x, nfilters, size, strides=strides,
-                         padding=padding, kernel_initializer=get_init(),
+                         padding=padding, kernel_initializer=get_init(stdev),
                          name=name, activation=activation)
     z = leaky_relu(z)
     z = dropout(z, is_train, droprate)
@@ -105,7 +105,7 @@ def layer_conv2d(x, nfilters, size, strides, padding, name,
 
 
 def encoder(images, latent_size, droprate=0.7, is_train=True,
-            nfilters=None):
+            nfilters=None, stdev=0.04):
     """
     Build the encoder part of th neural network
     
@@ -144,18 +144,18 @@ def encoder(images, latent_size, droprate=0.7, is_train=True,
         for i, ki in enumerate(k):
             """Use the last element on the layers list"""
             hc = layer_conv2d(layers[-1], ki[0], ki[1], 2, "same",
-                               "filter_{:02d}".format(i),
+                               "filter_{:02d}".format(i), stdev,
                                droprate, is_train, activation=None)
             layers.append(hc)
 
         h = tf.contrib.layers.flatten(layers[-1])
-        he = tf.layers.dense(h, latent_size, kernel_initializer=get_init(),
+        he = tf.layers.dense(h, latent_size, kernel_initializer=get_init(stdev),
                              activation=None,
                              name='latent_space')
         print(layers, he)
     return he
 
-def layer_upconv(x, nfilters, size, strides,
+def layer_upconv(x, nfilters, size, strides, stdev,
                  padding, tname, droprate, is_train):
     """
     Create a layer for the decoder, up-scale the tensor
@@ -187,14 +187,14 @@ def layer_upconv(x, nfilters, size, strides,
     z = tf.layers.conv2d_transpose(x, nfilters, size, strides=strides,
                                      padding=padding,
                                      activation=None,
-                                     kernel_initializer=get_init())
+                                     kernel_initializer=get_init(stdev))
 
     z = leaky_relu(z)
     z = dropout(z, is_train, droprate)
     return z
 
 def decoder(z, nchannels=2, width=64, droprate=.7, is_train=True,
-            nfilters=None):
+            nfilters=None, stdev=0.4):
 
     if nfilters is None:
         #ks = 32 * np.asarray([1, 2, 4, 8], dtype=np.int32)
@@ -210,7 +210,7 @@ def decoder(z, nchannels=2, width=64, droprate=.7, is_train=True,
     if 1 == 1:
         layers = list()
         dh = tf.layers.dense(z, isize * isize * k[0][0], activation=None,
-                             kernel_initializer=get_init())
+                             kernel_initializer=get_init(stdev))
         dh = leaky_relu(dh)
         dh = dropout(dh, is_train, droprate)
         layers.append(dh)
@@ -223,17 +223,19 @@ def decoder(z, nchannels=2, width=64, droprate=.7, is_train=True,
                 layers.append(dh)
             else:
                 tname = "upconv_{:02d}".format(i)
-                dh  = layer_upconv(layers[-1], ki[0], ki[1], 2, "same",
+                dh  = layer_upconv(layers[-1], ki[0], ki[1], 2, stdev, "same",
                                    tname, droprate, is_train)
                 layers.append(dh)
 
         dh0 = tf.layers.conv2d_transpose(layers[-1], nchannels, 5, strides=2,
                                          padding='same',
                                          activation=None,
-                                         kernel_initializer=get_init(),
+                                         kernel_initializer=get_init(stdev),
                                          name='decoder_out')
-
-        sdh0 = tf.nn.sigmoid(dh0)  # , name='decoder_image')
+        
+        #sdh0 = tf.nn.sigmoid(dh0)  # , name='decoder_image')
+        #sdh0 = tf.nn.tanh(dh0)
+        sdh0 = tf.nn.relu(dh0)
         print(layers, dh0)
     return sdh0
 
@@ -253,12 +255,17 @@ def ae_loss(images, sdh0):
     loss : float
         The reduced loss over all samples
     """
-#    xloss = -tf.reduce_sum(images * tf.log(sdh0) +
-#                          (1 - images) * tf.log(1 - sdh0), (1, 2, 3))
+    xloss = -tf.reduce_mean(images * tf.log(sdh0 + 0.00001) +
+                           (1 - images) * tf.log(1 - sdh0 + .00001))
 
+    image_entropy = tf.reduce_mean(-tf.abs(images)*tf.log(tf.abs(0.0001 + images)))
+    sdh0_entropy = tf.reduce_mean(-tf.abs(sdh0)*tf.log(tf.abs(0.0001 + sdh0)))
+    diff = np.abs(image_entropy - sdh0_entropy)
+    
     rloss = tf.reduce_sum(tf.square(images - sdh0), (1, 2, 3))
-    loss = tf.reduce_mean(rloss)
-    return loss
+    loss = tf.reduce_mean(rloss) + 2*xloss
+    print(image_entropy, sdh0_entropy, loss)
+    return loss, xloss, diff
 
 
 def model_opt(loss, learning_rate):

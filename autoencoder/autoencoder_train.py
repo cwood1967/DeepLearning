@@ -120,6 +120,7 @@ def train(mmdict, df, params, ndisp, saveto=None):
     enc_sizes = params['enc_sizes']
     dec_sizes = params['dec_sizes']
     droprate = params['droprate']
+    stdev = params['stdev']
 
     if saveto is None:
         saveto = ""
@@ -135,12 +136,12 @@ def train(mmdict, df, params, ndisp, saveto=None):
     z = tf.placeholder(tf.float32, (None, latent_size))
 
     enc = network.encoder(images, latent_size, droprate=droprate, is_train=True,
-                          nfilters=enc_sizes)
+                          nfilters=enc_sizes, stdev=stdev)
     sdd = network.decoder(enc, nchannels=nchannels, width=width,
                           droprate=droprate,
-                          is_train=True, nfilters=dec_sizes)
+                          is_train=True, nfilters=dec_sizes, stdev=stdev)
 
-    loss = network.ae_loss(images, sdd)
+    loss, ient, gent = network.ae_loss(images, sdd)
 
     opt = network.model_opt(loss, learning_rate)
     print(len(df), len(df)//batchsize, batchsize)
@@ -170,7 +171,7 @@ def train(mmdict, df, params, ndisp, saveto=None):
                     # aenc = sess.run(enc,
                     #                 feed_dict={images:batch})
 
-                    asdd, aenc, az, _ = sess.run([sdd, enc, loss, opt],
+                    asdd, aenc, az, aient, agent, _ = sess.run([sdd, enc, loss, ient, gent, opt],
                                                  feed_dict={images: batch})
 
                     ni = np.random.randint(0, batchsize)
@@ -181,7 +182,7 @@ def train(mmdict, df, params, ndisp, saveto=None):
                         test_sdd = sess.run(sdd, feed_dict={enc: test_he,
                                                             images: test_batch})
 
-                        print('Epoch: ', e, 'Iteration: ', ib, 'Loss: ', az)
+                        print('Epoch: ', e, 'Iteration: ', ib, 'Loss: ', az, aient, agent)
                         '''
                         display(sess, sdh0r[:, :, 0], batch[ni, :, :, 0],
                                 test_sdd[ni, :, :, 0], test_batch[ni, :, :, 0],
