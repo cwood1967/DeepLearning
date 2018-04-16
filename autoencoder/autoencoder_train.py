@@ -12,8 +12,8 @@ from matplotlib import pyplot as plt
 
 
 # print(sys.path)
-import network
-import utils
+from autoencoder import network
+from autoencoder import utils
 
 
 def check_gpu():
