@@ -167,7 +167,9 @@ def train(mmdict, df, params, ndisp, saveto=None):
                                                            df, start, batchsize,
                                                            width, nchannels,
                                                            channels=channels)
-
+                    nr = np.random.randint(0,4)
+                    if nr > 0:
+                        batch = np.rot90(batch, nr, (1,2)) 
                     # aenc = sess.run(enc,
                     #                 feed_dict={images:batch})
 
