@@ -105,7 +105,7 @@ def layer_conv2d(x, nfilters, size, strides, padding, name, stdev,
 
 
 def encoder(images, latent_size, droprate=0.7, is_train=True,
-            nfilters=None, stdev=0.04):
+            nfilters=None, stdev=0.04, knum=None):
     """
     Build the encoder part of th neural network
     
@@ -128,6 +128,12 @@ def encoder(images, latent_size, droprate=0.7, is_train=True,
         fully connected layer of size (batchsize, layer_layer_size)
         
     """
+    
+    if knum is None:
+        sknum = ""
+    else:
+        sknum = "_" + str(knum)
+        
     print('Encoder', is_train)
     # images = tf.placeholder(tf.float32, (None, height, width, nchannels))
 
@@ -144,15 +150,15 @@ def encoder(images, latent_size, droprate=0.7, is_train=True,
         for i, ki in enumerate(k):
             """Use the last element on the layers list"""
             hc = layer_conv2d(layers[-1], ki[0], ki[1], 2, "same",
-                               "filter_{:02d}".format(i), stdev,
+                               "filter{:s}_{:02d}".format(sknum, i), stdev,
                                droprate, is_train, activation=None)
             layers.append(hc)
 
         h = tf.contrib.layers.flatten(layers[-1])
         he = tf.layers.dense(h, latent_size, kernel_initializer=get_init(stdev),
                              activation=None,
-                             name='latent_space')
-        print(layers, he)
+                             name='latent_space' + sknum)
+        #print(layers, he)
     return he
 
 def layer_upconv(x, nfilters, size, strides, stdev,
@@ -194,8 +200,13 @@ def layer_upconv(x, nfilters, size, strides, stdev,
     return z
 
 def decoder(z, nchannels=2, width=64, droprate=.7, is_train=True,
-            nfilters=None, stdev=0.4):
+            nfilters=None, stdev=0.4, knum=None):
 
+    if knum is None:
+        sknum = ""
+    else:
+        sknum = str(knum)
+        
     if nfilters is None:
         #ks = 32 * np.asarray([1, 2, 4, 8], dtype=np.int32)
         k = [(256, 3), (128, 3), (64, 3), (32, 5)]
@@ -215,14 +226,12 @@ def decoder(z, nchannels=2, width=64, droprate=.7, is_train=True,
         dh = dropout(dh, is_train, droprate)
         layers.append(dh)
 
-
-
         for i, ki in enumerate(k):
             if i == 0:
                 dh = tf.reshape(layers[-1], (-1, isize, isize, k[0][0]))
                 layers.append(dh)
             else:
-                tname = "upconv_{:02d}".format(i)
+                tname = "upconv_{:s}_{:02d}".format(sknum, i)
                 dh  = layer_upconv(layers[-1], ki[0], ki[1], 2, stdev, "same",
                                    tname, droprate, is_train)
                 layers.append(dh)
@@ -231,7 +240,7 @@ def decoder(z, nchannels=2, width=64, droprate=.7, is_train=True,
                                          padding='same',
                                          activation=None,
                                          kernel_initializer=get_init(stdev),
-                                         name='decoder_out')
+                                         name='decoder_out' + sknum)
         
         #rmax = tf.reduce_max(dh0)
         #rmin = tf.reduce_min(dh0)
@@ -242,8 +251,72 @@ def decoder(z, nchannels=2, width=64, droprate=.7, is_train=True,
         print("dh0", dh0.shape)
         sdh0 = tf.nn.relu(dh0)
         #sdh0 = (dh0 - rmin)/(rmax - rmin) 
-        print(layers, dh0)
+        #print(layers, dh0)
     return sdh0
+
+def mixture(enc_stack, nclusters):
+    split = tf.split(enc_stack, nclusters)
+  
+    concat = tf.squeeze(tf.concat(split, axis=2), axis=0)
+    print("Split", split)
+    print("Concat", concat.get_shape().as_list())
+    print("Stack", enc_stack)
+    
+    stdev = 0.005
+    m1 = tf.layers.dense(concat, 4*2048, activation=None,
+                          kernel_initializer=get_init(stdev))
+    
+    #m1 = tf.nn.dropout(m1, .5)
+    m2 = tf.layers.dense(m1, 2*1024, activation=None,
+                          kernel_initializer=get_init(stdev))
+    
+    #m2 = tf.nn.dropout(m2, .5)
+        
+    m3 = tf.layers.dense(m2, 2*512, activation=tf.nn.tanh,
+                          kernel_initializer=get_init(stdev))
+    
+    #m3 = tf.nn.dropout(m3, .5)
+    logits = tf.layers.dense(m3, nclusters, activation=tf.nn.tanh,
+                         kernel_initializer=get_init(stdev))
+    
+    p = tf.nn.softmax(logits)
+    return p
+
+def mix_loss(images, sdd_stack, mixp, a, b):
+    
+    batchsize = images.get_shape().as_list()[0]
+    p_entropy = -tf.reduce_sum(mixp*tf.log(mixp), (1))
+    
+    ##mixp_entropy = -mixp*tf.log(mixp)
+    p_batch = tf.reduce_mean(mixp, (0))
+    p_batch_entropy = -p_batch*tf.log(p_batch)
+    pbar_entropy = tf.reduce_sum(p_batch_entropy)
+    
+    pmin = tf.reduce_min(p_batch)
+    pmax = tf.reduce_max(p_batch)
+    
+    pd = pmax - pmin
+    
+    print("pbar", pbar_entropy)
+    rerr = tf.reduce_sum(tf.square(images - sdd_stack), (2,3, 4))
+    
+    xloss = -tf.reduce_mean(images * tf.log(sdd_stack + 0.00001) +
+                           (1 - images) * tf.log(1 - sdd_stack + .00001))
+    print("Stack", sdd_stack)
+    print("Stack", xloss)
+ 
+    print("Rerr ", tf.transpose(rerr))
+    print("Mix",mixp)
+    rloss = tf.reduce_sum(tf.multiply(tf.transpose(rerr), mixp), (1))
+    
+    rploss = tf.reduce_sum(rloss + a*p_entropy)
+    print(rploss)
+    
+    loss1 = rploss + 100*xloss
+    loss2 = loss1 - b*pbar_entropy
+
+    loss = loss2
+    return loss, rploss, p_entropy, tf.reduce_mean(rerr), tf.reduce_mean(pbar_entropy)
 
 
 def ae_loss(images, sdh0):
