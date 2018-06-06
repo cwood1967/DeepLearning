@@ -105,7 +105,7 @@ def layer_conv2d(x, nfilters, size, strides, padding, name, stdev,
 
 
 def encoder(images, latent_size, droprate=0.7, is_train=True,
-            nfilters=None, stdev=0.04, knum=None):
+            nfilters=None, stdev=0.04, knum=None, channel=None, denoise=None):
     """
     Build the encoder part of th neural network
     
@@ -129,14 +129,20 @@ def encoder(images, latent_size, droprate=0.7, is_train=True,
         
     """
     
+    if denoise:
+        images = tf.nn.dropout(images, 1 - denoise)
+        
     if knum is None:
         sknum = ""
+        image = images
     else:
         sknum = "_" + str(knum)
-        
+        image = images[:, :, :, knum]
+        image = tf.expand_dims(image, 3)
     print('Encoder', is_train)
     # images = tf.placeholder(tf.float32, (None, height, width, nchannels))
 
+    print(image, image.shape)
     """create the model using the images"""
     if nfilters is None:
         k = 64 * np.asarray([1, 2, 4, 8], dtype=np.int32)
@@ -146,7 +152,7 @@ def encoder(images, latent_size, droprate=0.7, is_train=True,
 
     if 1 == 1:
         layers = list()
-        layers.append(images)
+        layers.append(image)
         for i, ki in enumerate(k):
             """Use the last element on the layers list"""
             hc = layer_conv2d(layers[-1], ki[0], ki[1], 2, "same",
@@ -282,6 +288,49 @@ def mixture(enc_stack, nclusters):
     p = tf.nn.softmax(logits)
     return p
 
+def combine_channels(enc_stack, nchannels):
+    split = tf.split(enc_stack, nchannels)
+  
+    concat = tf.squeeze(tf.concat(split, axis=2), axis=0)
+    print("Split", split)
+    print("Concat", concat.get_shape().as_list())
+    print("Stack", enc_stack)
+
+    '''
+    stdev = 0.005
+    m1 = tf.layers.dense(concat, 4*2048, activation=None,
+                          kernel_initializer=get_init(stdev))
+    
+    #m1 = tf.nn.dropout(m1, .5)
+    m2 = tf.layers.dense(m1, 2*1024, activation=None,
+                          kernel_initializer=get_init(stdev))
+    
+    #m2 = tf.nn.dropout(m2, .5)
+        
+    m3 = tf.layers.dense(m2, 2*512, activation=tf.nn.tanh,
+                          kernel_initializer=get_init(stdev))
+    
+    #m3 = tf.nn.dropout(m3, .5)
+    logits = tf.layers.dense(m3, nclusters, activation=tf.nn.tanh,
+                         kernel_initializer=get_init(stdev))
+    
+    p = tf.nn.softmax(logits)
+    '''
+    return concat
+
+def comb_loss(images, sdd_stack, combined, nchannels):
+    losses = list()
+    for i in range(nchannels):
+        x = tf.expand_dims(images[:,:,:,i], -1)
+        r = sdd_stack[i]
+        losses.append(tf.reduce_sum(tf.square(x - r)))
+    
+    
+    tloss = tf.convert_to_tensor(losses)
+    loss = tf.reduce_sum(tloss)
+    print("Comb loss", x, r, tloss, losses)
+    return loss
+
 def mix_loss(images, sdd_stack, mixp, a, b):
     
     batchsize = images.get_shape().as_list()[0]
@@ -346,7 +395,17 @@ def ae_loss(images, sdh0):
     print(image_entropy, sdh0_entropy, loss)
     return loss, xloss, diff
 
+def sparse_loss(images, sdh0, h, slam):
+    xloss = -tf.reduce_sum(images * tf.log(sdh0 + 0.00001) +
+                           (1 - images) * tf.log(1 - sdh0 + .00001))
+    
+    rloss = tf.reduce_sum(tf.square(images - sdh0), (1, 2, 3))
+    rloss = tf.reduce_mean(rloss)
+    omega = slam*tf.reduce_sum(tf.abs(h))
+    
+    return rloss + .01*xloss + omega, rloss, omega
 
+    
 def model_opt(loss, learning_rate):
     opt = tf.train.AdamOptimizer(learning_rate=learning_rate, beta1=.5).minimize(loss)
     return opt

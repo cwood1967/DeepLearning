@@ -121,7 +121,9 @@ def train(mmdict, df, params, ndisp, saveto=None):
     dec_sizes = params['dec_sizes']
     droprate = params['droprate']
     stdev = params['stdev']
-
+    denoise = params['denoise']
+    slam = params['slam']
+    
     if saveto is None:
         saveto = ""
     else:
@@ -136,13 +138,14 @@ def train(mmdict, df, params, ndisp, saveto=None):
     z = tf.placeholder(tf.float32, (None, latent_size))
 
     enc = network.encoder(images, latent_size, droprate=droprate, is_train=True,
-                          nfilters=enc_sizes, stdev=stdev)
+                          nfilters=enc_sizes, stdev=stdev, denoise = denoise)
     sdd = network.decoder(enc, nchannels=nchannels, width=width,
                           droprate=droprate,
                           is_train=True, nfilters=dec_sizes, stdev=stdev)
 
-    loss, ient, gent = network.ae_loss(images, sdd)
-
+    #loss, ient, gent = network.ae_loss(images, sdd, enc)
+    loss, ient, gent = network.sparse_loss(images, sdd, enc, slam)
+    
     opt = network.model_opt(loss, learning_rate)
     print(len(df), len(df)//batchsize, batchsize)
     test_batch, _, _ = utils.getbatch(mmdict, df, len(df) // batchsize - 1,
@@ -167,7 +170,7 @@ def train(mmdict, df, params, ndisp, saveto=None):
                                                            df, start, batchsize,
                                                            width, nchannels,
                                                            channels=channels)
-                    nr = np.random.randint(0,4)
+                    nr = 0 #np.random.randint(0,4)
                     if nr > 0:
                         batch = np.rot90(batch, nr, (1,2)) 
                     # aenc = sess.run(enc,
