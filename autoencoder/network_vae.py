@@ -373,7 +373,7 @@ def vae_loss(images, sdh0, z_vae, z_mean, z_logstd, slam):
                                 tf.exp(z_logstd) -
                                 z_logstd - 1,1)
     
-    xloss = -tf.reduce_sum(images * tf.log(sdh0 + 1e-8) +
+    xloss = -tf.reduce_mean(images * tf.log(sdh0 + 1e-8) +
                            (1 - images) * tf.log(1 - sdh0 + 1e-8), (1,2,3))
     
     rloss = tf.reduce_sum(tf.square(images - sdh0), (1, 2, 3))

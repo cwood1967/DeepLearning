@@ -396,15 +396,16 @@ def ae_loss(images, sdh0):
     return loss, xloss, diff
 
 def sparse_loss(images, sdh0, h, slam):
-    xloss = -tf.reduce_sum(images * tf.log(sdh0 + 0.00001) +
-                           (1 - images) * tf.log(1 - sdh0 + .00001))
+    xloss = -tf.reduce_sum(images * tf.log(sdh0 + 1e-8) +
+                           (1 - images) * tf.log(1 - sdh0 + 1e-8), (1, 2, 3))
     
+    xloss = tf.reduce_mean(xloss)
     rloss = tf.reduce_sum(tf.square(images - sdh0), (1, 2, 3))
     rloss = tf.reduce_mean(rloss)
     omega = slam*tf.reduce_sum(tf.abs(h))
     
-    return rloss + .01*xloss + omega, rloss, omega
-
+    #return rloss + .01*xloss + omega, rloss, omega
+    return rloss + omega, rloss, omega
     
 def model_opt(loss, learning_rate):
     opt = tf.train.AdamOptimizer(learning_rate=learning_rate, beta1=.5).minimize(loss)
