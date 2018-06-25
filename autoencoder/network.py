@@ -327,7 +327,7 @@ def comb_loss(images, sdd_stack, combined, nchannels):
     
     
     tloss = tf.convert_to_tensor(losses)
-    loss = tf.reduce_sum(tloss)
+    loss = tf.reduce_mean(tloss)
     print("Comb loss", x, r, tloss, losses)
     return loss
 
@@ -396,8 +396,8 @@ def ae_loss(images, sdh0):
     return loss, xloss, diff
 
 def sparse_loss(images, sdh0, h, slam):
-    xloss = -tf.reduce_sum(images * tf.log(sdh0 + 1e-8) +
-                           (1 - images) * tf.log(1 - sdh0 + 1e-8), (1, 2, 3))
+    xloss = -tf.reduce_mean(images * tf.log(sdh0 + 1e-6) +
+                           (1 - images) * tf.log(1 - sdh0 + 1e-6), (1, 2, 3))
     
     xloss = tf.reduce_mean(xloss)
     rloss = tf.reduce_sum(tf.square(images - sdh0), (1, 2, 3))
@@ -405,7 +405,7 @@ def sparse_loss(images, sdh0, h, slam):
     omega = slam*tf.reduce_sum(tf.abs(h))
     
     #return rloss + .01*xloss + omega, rloss, omega
-    return rloss + omega, rloss, omega
+    return rloss + xloss + omega, rloss, omega
     
 def model_opt(loss, learning_rate):
     opt = tf.train.AdamOptimizer(learning_rate=learning_rate, beta1=.5).minimize(loss)
