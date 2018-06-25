@@ -161,11 +161,11 @@ def encoder(images, latent_size, droprate=0.7, is_train=True,
             layers.append(hc)
 
         h = tf.contrib.layers.flatten(layers[-1])
-        hmean = tf.layers.dense(h, latent_size, kernel_initializer=get_init(stdev),
+        hmean = tf.layers.dense(h, latent_size, kernel_initializer=get_init(10.*stdev),
                              activation=None,
                              name='latent_mean' + sknum)
         
-        hlogstd = tf.layers.dense(h, latent_size, kernel_initializer=get_init(stdev),
+        hlogstd = tf.layers.dense(h, latent_size, kernel_initializer=get_init(10.*stdev),
                              activation=None,
                              name='latent_stdev' + sknum)
         #print(layers, he)
@@ -255,11 +255,11 @@ def decoder(z, nchannels=2, width=64, droprate=.7, is_train=True,
         #rmax = tf.reduce_max(dh0)
         #rmin = tf.reduce_min(dh0)
         
-        sdh0 = tf.nn.sigmoid(dh0)  # , name='decoder_image')
+        #sdh0 = tf.nn.sigmoid(dh0)  # , name='decoder_image')
         #sdh0 = tf.nn.tanh(dh0)
         dh0 = tf.minimum(dh0, 1)
         print("dh0", dh0.shape)
-        #sdh0 = tf.nn.relu(dh0)
+        sdh0 = tf.nn.relu(dh0)
         #sdh0 = (dh0 - rmin)/(rmax - rmin) 
         #print(layers, dh0)
     return sdh0
@@ -380,7 +380,7 @@ def vae_loss(images, sdh0, z_vae, z_mean, z_logstd, slam):
     rloss = tf.reduce_mean(rloss)
     #omega = slam*tf.reduce_sum(tf.abs(h))
     
-    return tf.reduce_mean(xloss + kloss), tf.reduce_mean(xloss), tf.reduce_mean(kloss)
+    return tf.reduce_mean(xloss + kloss), tf.reduce_mean(rloss), tf.reduce_mean(kloss)
     
 def model_opt(loss, learning_rate):
     opt = tf.train.AdamOptimizer(learning_rate=learning_rate, beta1=.5).minimize(loss)
