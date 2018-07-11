@@ -164,8 +164,8 @@ def train(mmdict, df, params, ndisp, saveto=None):
                     # aenc = sess.run(enc,
                     #                 feed_dict={images:batch})
 
-                    asdd, aenc, acomb, az, _ = sess.run([sdd_stack, enc_stack, combined, loss,
-                                                                      opt],
+                    asdd, aenc, acomb, az, _ = sess.run([sdd_stack, enc_stack,
+                                                         combined, loss, opt],
                                                  feed_dict={images: batch})
 
                     ni = np.random.randint(0, batchsize)

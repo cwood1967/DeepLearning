@@ -206,7 +206,7 @@ def layer_upconv(x, nfilters, size, strides, stdev,
     return z
 
 def decoder(z, nchannels=2, width=64, droprate=.7, is_train=True,
-            nfilters=None, stdev=0.4, knum=None):
+            nfilters=None, stdev=0.4, knum=None, cat = None):
 
     if knum is None:
         sknum = ""
@@ -224,6 +224,11 @@ def decoder(z, nchannels=2, width=64, droprate=.7, is_train=True,
     print("isize: ", isize, width)
 
     #     with tf.variable_scope("decoder", reuse=(not is_train)):
+    
+    if cat:
+        ''' go from 256 -> 512 -> 256 (or what ever) '''
+        pass
+    
     if 1 == 1:
         layers = list()
         dh = tf.layers.dense(z, isize * isize * k[0][0], activation=None,
@@ -288,6 +293,9 @@ def mixture(enc_stack, nclusters):
     p = tf.nn.softmax(logits)
     return p
 
+''' combine the channel vectors into one vector, then
+run through some dense layers 
+'''
 def combine_channels(enc_stack, nchannels):
     split = tf.split(enc_stack, nchannels)
   
@@ -296,28 +304,33 @@ def combine_channels(enc_stack, nchannels):
     print("Concat", concat.get_shape().as_list())
     print("Stack", enc_stack)
 
-    '''
-    stdev = 0.005
-    m1 = tf.layers.dense(concat, 4*2048, activation=None,
+    stdev = 0.04
+    m1 = tf.layers.dense(concat, 512, activation=None,
                           kernel_initializer=get_init(stdev))
     
-    #m1 = tf.nn.dropout(m1, .5)
-    m2 = tf.layers.dense(m1, 2*1024, activation=None,
+    m1 = leaky_relu(m1)
+    m1 = tf.nn.dropout(m1, .75)
+    m2 = tf.layers.dense(m1, 256, activation=None,
                           kernel_initializer=get_init(stdev))
-    
-    #m2 = tf.nn.dropout(m2, .5)
+    m2 = leaky_relu(m2)
+    m2 = tf.nn.dropout(m2, .75)
         
-    m3 = tf.layers.dense(m2, 2*512, activation=tf.nn.tanh,
-                          kernel_initializer=get_init(stdev))
-    
-    #m3 = tf.nn.dropout(m3, .5)
-    logits = tf.layers.dense(m3, nclusters, activation=tf.nn.tanh,
-                         kernel_initializer=get_init(stdev))
-    
-    p = tf.nn.softmax(logits)
-    '''
-    return concat
+    return m2
 
+def uncombine_channels(combined, nchannels):
+    
+    stdev = 0.04
+    m2 =  tf.layers.dense(combined, 512, activation=None,
+                          kernel_initializer=get_init(stdev))
+    m2 = leaky_relu(m2)
+    m2 = tf.nn.dropout(m2, .75)
+    
+    m1 =  tf.layers.dense(m2, 256, activation=None,
+                          kernel_initializer=get_init(stdev))
+    m1 = leaky_relu(m2)
+    m1 = tf.nn.dropout(m2, .75)
+    
+    
 def comb_loss(images, sdd_stack, combined, nchannels):
     losses = list()
     for i in range(nchannels):
