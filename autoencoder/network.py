@@ -293,10 +293,11 @@ def mixture(enc_stack, nclusters):
     p = tf.nn.softmax(logits)
     return p
 
-''' combine the channel vectors into one vector, then
+'''
+combine the channel vectors into one vector, then
 run through some dense layers 
 '''
-def combine_channels(enc_stack, nchannels):
+def combine_channels(enc_stack, nchannels, droprate):
     split = tf.split(enc_stack, nchannels)
   
     concat = tf.squeeze(tf.concat(split, axis=2), axis=0)
@@ -309,26 +310,39 @@ def combine_channels(enc_stack, nchannels):
                           kernel_initializer=get_init(stdev))
     
     m1 = leaky_relu(m1)
-    m1 = tf.nn.dropout(m1, .75)
+    m1 = tf.nn.dropout(m1, droprate)
     m2 = tf.layers.dense(m1, 256, activation=None,
                           kernel_initializer=get_init(stdev))
     m2 = leaky_relu(m2)
-    m2 = tf.nn.dropout(m2, .75)
+    #m2 = tf.nn.dropout(m2, .75)
         
     return m2
 
-def uncombine_channels(combined, nchannels):
+def uncombine_channels(combined,
+                       nchannels, width,
+                       droprate, dec_sizes):
     
     stdev = 0.04
-    m2 =  tf.layers.dense(combined, 512, activation=None,
+    m1 =  tf.layers.dense(combined, 512, activation=None,
                           kernel_initializer=get_init(stdev))
-    m2 = leaky_relu(m2)
-    m2 = tf.nn.dropout(m2, .75)
-    
-    m1 =  tf.layers.dense(m2, 256, activation=None,
-                          kernel_initializer=get_init(stdev))
-    m1 = leaky_relu(m2)
-    m1 = tf.nn.dropout(m2, .75)
+    m1 = leaky_relu(m1)
+    m1 = tf.nn.dropout(m1, droprate)
+
+    ## no go to separate channels
+
+    sddlist = list()
+    for i in range(nchannels):
+        mc = tf.layers.dense(m1, 128, activation=None,
+                             kernel_initializer=get_init(stdev))
+
+        sdd = decoder(mc, nchannels=1, width=width, droprate=droprate,
+                      is_train=True, nfilters=dec_sizes, stdev=stdev,
+                      knum=i)
+        
+        sddlist.append(sdd)
+
+    sdd_stack =tf.stack(sddlist)
+    return sdd_stack
     
     
 def comb_loss(images, sdd_stack, combined, nchannels):

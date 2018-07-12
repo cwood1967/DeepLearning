@@ -122,16 +122,20 @@ def train(mmdict, df, params, ndisp, saveto=None):
     for i in range(nchannels):
         enc = network.encoder(images, latent_size, droprate=droprate, is_train=True,
                               nfilters=enc_sizes, stdev=stdev, knum=i)
-        sdd = network.decoder(enc, nchannels=1, width=width,
-                              droprate=droprate,
-                              is_train=True, nfilters=dec_sizes, stdev=stdev, knum=i)
+        # sdd = network.decoder(enc, nchannels=1, width=width,
+        #                       droprate=droprate,
+        #                       is_train=True, nfilters=dec_sizes, stdev=stdev, knum=i)
         enc_list.append(enc)
-        sdd_list.append(sdd)
+        # sdd_list.append(sdd)
     
     enc_stack = tf.stack(enc_list)
-    sdd_stack = tf.stack(sdd_list)
+#    sdd_stack = tf.stack(sdd_list)
+
     '''add the network for the mixture model, it will be concatenated in the model'''
-    combined = network.combine_channels(enc_stack, nchannels)  ## returns tensor with nclusters probabilities
+    combined = network.combine_channels(enc_stack, nchannels. droprate)
+    sdd_stack = network.uncombine_channels(combined, nchannels, width,
+                                           droprate, dec_sizes)
+    
     loss = network.comb_loss(images, sdd_stack, combined, nchannels)
 
     opt = network.model_opt(loss, learning_rate)
