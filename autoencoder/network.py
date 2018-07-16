@@ -312,8 +312,8 @@ def combine_channels(enc_stack, nchannels):
     m1 = tf.nn.dropout(m1, .75)
     m2 = tf.layers.dense(m1, 256, activation=None,
                           kernel_initializer=get_init(stdev))
-    m2 = leaky_relu(m2)
-    m2 = tf.nn.dropout(m2, .75)
+    #m2 = leaky_relu(m2)
+    #m2 = tf.nn.dropout(m2, .75)
         
     return m2
 
@@ -418,7 +418,7 @@ def sparse_loss(images, sdh0, h, slam):
     omega = slam*tf.reduce_sum(tf.abs(h))
     
     #return rloss + .01*xloss + omega, rloss, omega
-    return rloss + xloss + omega, rloss, omega
+    return rloss + 0.*xloss + omega, rloss, omega
     
 def model_opt(loss, learning_rate):
     opt = tf.train.AdamOptimizer(learning_rate=learning_rate, beta1=.5).minimize(loss)

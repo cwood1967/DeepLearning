@@ -134,6 +134,36 @@ def getbatch(mmdict, df, start, batchsize, size, nchannels, channels=None):
     return batch, wells, rownums
 
 
+def get_df(mmdict, df, size, nchannels, channels=None):
+    if channels == None:
+        channels = np.arange(nchannels)
+
+    dfsize = len(df)
+    images = np.zeros((dfsize, size, size, nchannels))
+    for i, (index, irow) in enumerate(df.iterrows()):
+        rid = irow['id'] ## id in the whole dataframe
+        fid = irow['fid'] ## id in the mmfile the image is in
+        xc = irow['xc']
+        yc = irow['yc']
+        x = int(xc) - size//2
+        y = int(yc) - size//2
+        mfile = mmdict[irow['mmfile'].strip()]
+        
+        shape = mfile.shape
+        if x < 0:
+            x = 0
+        if y < 0:
+            y = 0
+        if x > (shape[2] - size):
+            x = shape[2] - size
+        if y > (shape[1] - size):
+            y = shape[1] - size
+
+        z = mfile[fid][y: y + size, x: x + size, channels]
+        images[i] = z
+    return images
+    
+    
 def getWell(mmdict, df, size, row, column, nchannels, channels=None):
     """
     Get every image patch in a well
