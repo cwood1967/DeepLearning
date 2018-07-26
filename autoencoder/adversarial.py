@@ -1,0 +1,298 @@
+import tensorflow as tf
+import numpy as np
+import pandas as pd
+import autoencoder.network as network
+import autoencoder.utils as utils
+
+from matplotlib import pyplot as plt
+
+class adversarial_autoencoder():
+
+    def __init__(self, params):
+        self.width = params['width']
+        self.height = params['height']
+        self.nchannels = params['nchannels']
+        self.channels = params['channels']
+        self.nepochs = params['nepochs']
+        self.batchsize = params['batchsize']
+        self.learning_rate = params['learning_rate']
+        self.restore = params['restore']
+        self.latent_size = params['latent_size']
+        self.enc_sizes = params['enc_sizes']
+        self.dec_sizes = params['dec_sizes']
+        self.droprate = params['droprate']
+        self.stdev = params['stdev']
+        self.denoise = params['denoise']
+        self.slam = params['slam']
+
+
+    def d_initializer(self, stdev):
+        """
+        Create a layer initializer
+        Returns
+        -------
+        Normal initializer
+        """
+        return tf.truncated_normal_initializer(stddev=stdev) #.04
+
+    
+    def create_encoder(self, images, is_train, reuse=False):
+
+        with tf.variable_scope("encoder", reuse=reuse):
+            self.encoder = network.encoder(images, self.latent_size,
+                                           self.droprate, is_train=is_train,
+                                           nfilters=self.enc_sizes, stdev=self.stdev,
+                                           denoise=None)
+         
+    def create_decoder(self, is_train, reuse=False):
+
+        z = self.encoder
+        with tf.variable_scope("decoder", reuse=reuse):
+            self.decoder= network.decoder(z, nchannels=self.nchannels,
+                                          width=self.width, droprate=self.droprate,
+                                          is_train=is_train, nfilters=self.dec_sizes,
+                                          stdev=self.stdev)
+
+    
+    def create_discriminator(self, z, reuse=False):
+
+        with tf.variable_scope("discriminator", reuse=reuse):
+            h1 = tf.layers.dense(z, 1000,
+                                 kernel_initializer=self.d_initializer(self.stdev),
+                                 activation=None,
+                                 name="discrim01")
+
+            h1 = network.leaky_relu(h1)
+
+            h2 = tf.layers.dense(h1, 1000,
+                                 kernel_initializer=self.d_initializer(self.stdev),
+                                 activation=None,
+                                 name="discrim02")
+
+            h2 = network.leaky_relu(h2)
+
+            last = tf.layers.dense(h2, 1,
+                                 kernel_initializer=self.d_initializer(self.stdev),
+                                 activation=None,
+                                 name="discrim03")
+
+            return last
+        
+
+    def create_sample(self, size, mu, sigma):
+
+        sample = np.random.normal(mu, sigma, size=size)
+        return sample
+
+    def reconstruction_loss(self, images):
+
+        r1 = tf.reduce_sum(tf.square(images- self.decoder), axis=(1,2,3))
+        rloss = tf.reduce_mean(r1)
+        self.rloss = rloss
+        #return rloss
+
+    
+    def discriminator_loss(self, sample_z):
+
+        smooth = 0.2
+        sample_logits = self.create_discriminator(sample_z)
+        ae_logits = self.create_discriminator(self.encoder, reuse=True)
+
+        sample_labels = (1 - smooth)*tf.ones_like(sample_logits)
+        ae_labels = smooth + tf.zeros_like(ae_logits)
+
+        # trick the discriminator 
+        gen_labels = (1 - smooth)*tf.ones_like(ae_logits)
+        sce_sample =tf.nn.sigmoid_cross_entropy_with_logits(logits=sample_logits,
+                                                            labels=sample_labels)
+        d_sample_loss = tf.reduce_mean(sce_sample)
+        sce_ae = tf.nn.sigmoid_cross_entropy_with_logits(logits=ae_logits,
+                                                         labels=ae_labels)
+        d_ae_loss = tf.reduce_mean(sce_ae)
+        d_loss = d_sample_loss + d_ae_loss
+
+        sce_gen = tf.nn.sigmoid_cross_entropy_with_logits(logits=ae_logits,
+                                                          labels=gen_labels)
+        gen_loss = tf.reduce_mean(sce_gen)
+        
+        self.d_loss = d_loss
+        self.gen_loss = gen_loss
+
+    def loss(self, images, sample_z, gen_z):
+        rloss = self.reconstruction_loss(images)
+        dloss = self.discriminator_loss(sample_z, gen_z)
+
+        loss = rloss + dloss
+        self.rloss = rloss
+        self.dloss = dloss
+        self.loss = loss
+        return loss
+        
+
+    def opt(self):
+        tvar = tf.trainable_variables()
+        encvars = [a for a in tvar if 'encoder' in a.name]
+        decvars = [a for a in tvar if 'decoder' in a.name]
+        dvars = [a for a in tvar if 'discriminator' in a.name]
+        aevars = encvars + decvars
+
+        print(aevars)
+        self.ae_opt = tf.train.AdamOptimizer(self.learning_rate).minimize(
+            self.rloss, var_list=aevars)
+        self.d_opt = tf.train.AdamOptimizer(self.learning_rate).minimize(
+            self.d_loss, var_list=dvars)
+        self.g_opt = tf.train.AdamOptimizer(self.learning_rate).minimize(
+            self.gen_loss, var_list=encvars)
+
+        return self.ae_opt, self.d_opt, self.g_opt
+        
+def setup():
+    esize = [(128,3), (256, 3), (512,3)]
+    dsize = list(reversed(esize))
+
+    params =dict()
+    
+    params['width'] = 32
+    params['height'] = 32
+    params['nchannels'] = 4
+    params['channels'] = [0,1,3,4]
+    params['nepochs'] = 20
+    params['batchsize'] = 256
+    params['learning_rate'] = 0.0003
+    params['restore'] = False
+    params['latent_size'] = 64
+    params['enc_sizes'] = esize 
+    params['dec_sizes'] = dsize
+    params['droprate'] = 0.85
+    params['stdev'] = 0.04
+    params['denoise'] = False
+    params['slam'] = 0
+
+    return params
+
+def create_df(mmdict):
+    #all_ids =  range(n_all_images)
+    idx = 0
+    dataframes = list()
+    for key in mmdict.keys():
+        mm = mmdict[key]
+        n = mm.shape[0]
+        print(n)
+        file = n*[key[0:-3]]
+        fid = range(n)
+        mmfile = n*[key]
+        #plate = n*[0]
+        #row = n*[0]
+        #column = n*[0]
+        #field = n*[0]
+        yc = n*[32]
+        xc = n*[32]
+        #well = n*[0]
+        ids = np.arange(idx, idx + n, 1) #all_ids[idx:idx + n]
+        idx += n
+        df = pd.DataFrame({'id':ids, 'fid':fid, 'file':file, 'mmfile':mmfile,
+                          'yc':yc, 'xc':xc})
+
+        dataframes.append(df)
+
+    p_df = pd.concat(dataframes, ignore_index=True)
+    return p_df
+
+def create_mmdict(datadir):
+    mmdict = dict()
+    mmfiles = utils.list_mmfiles(datadir)
+    n_all_images = 0
+    
+    for mmfilename in mmfiles:
+        mmheader = np.memmap(mmfilename, dtype="int32", mode='r',
+                             shape=(4,))
+
+        header_shape = mmheader.shape
+        xshape = [mmheader[0], mmheader[1], mmheader[2], mmheader[3]]
+        xshape = tuple(xshape)
+        del mmheader
+        n_all_images += xshape[0]
+
+        m3 = np.memmap(mmfilename, dtype='float32', offset=128,
+                  mode='r', shape=xshape)
+        key = mmfilename.split("/")[-1]
+        mmdict[key] = m3
+
+    return mmdict, n_all_images
+
+def train():
+
+    datadir = '/media/cjw/Data/cyto/mmCompensatedTifs/'
+    params = setup()
+    
+    mmdict, n_all_images = create_mmdict(datadir)
+    df = create_df(mmdict)
+    
+    print(list(mmdict.keys()))
+    print(df.head())
+    w = params['width']
+    images = tf.placeholder(tf.float32, (None, w, w, params['nchannels'])) 
+    sample_z = tf.placeholder(tf.float32, (None, params['latent_size']))
+    
+    vn = adversarial_autoencoder(params)
+
+    vn.create_encoder(images, True)
+    vn.create_decoder(True)
+    #vn.create_discriminator(sample_z)
+    vn.reconstruction_loss(images)
+    vn.discriminator_loss(sample_z)
+    ae, d, g = vn.opt()
+    
+    with tf.Session() as sess:
+        sess.run(tf.global_variables_initializer())
+
+        for i in range(16000):
+            #print(i)
+            batch_images = utils.get_sample(mmdict, df, params['batchsize'],
+                                            params['width'], 
+                                            params['nchannels'],
+                                            channels=params['channels'])
+            
+            batch_z = np.random.normal(0, 5, size=(params['batchsize'],
+                                                   params['latent_size']))
+            sess.run(ae, feed_dict={images:batch_images})
+            sess.run(d, feed_dict={images:batch_images, sample_z:batch_z})
+            sess.run(g, feed_dict={images:batch_images, sample_z:batch_z})
+            sess.run(ae, feed_dict={images:batch_images})
+            
+            if i % 50 == 0:
+                xd = vn.d_loss.eval({images:batch_images, sample_z:batch_z})
+                xg = vn.gen_loss.eval({images:batch_images, sample_z:batch_z})
+                xr = vn.rloss.eval({images:batch_images, sample_z:batch_z})
+                test_image = np.expand_dims(batch_images[23],axis=0)
+                encoded = vn.encoder.eval({images:test_image})
+                decoded = vn.decoder.eval({images:test_image})
+                decoded = np.squeeze(decoded)
+                xspace = vn.encoder.eval({images:batch_images})
+                
+                print(i, xd, xg, xr, encoded.shape)
+                plt.figure(figsize=(8,2))
+                plt.subplot(2,6,1)
+                plt.imshow(np.squeeze(test_image)[:,:,0])
+                plt.subplot(2,6,2)
+                plt.imshow(np.squeeze(test_image)[:,:,1])
+                plt.subplot(2,6,3)
+                plt.imshow(np.squeeze(test_image)[:,:,2])
+                plt.subplot(2,6,4)
+                plt.imshow(np.squeeze(test_image)[:,:,3])
+                plt.subplot(2,6,7)
+                plt.imshow(decoded[:,:,0])
+                plt.subplot(2,6,8)
+                plt.imshow(decoded[:,:,1])
+                plt.subplot(2,6,9)
+                plt.imshow(decoded[:,:,2])
+                plt.subplot(2,6,10)
+                plt.imshow(decoded[:,:,3])
+                plt.subplot(2,3,3)
+                plt.hist(batch_z.reshape((-1)), bins=25)
+                plt.subplot(2,3,6)
+                plt.hist(xspace.reshape((-1)), bins=25)
+                plt.show()
+
+                
+        

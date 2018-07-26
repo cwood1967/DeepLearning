@@ -162,6 +162,14 @@ def get_df(mmdict, df, size, nchannels, channels=None):
         z = mfile[fid][y: y + size, x: x + size, channels]
         images[i] = z
     return images
+
+def get_sample(mmdict, df, n, size, nchannels, channels=None):
+    if channels == None:
+        channels = np.arange(0, nchannels, 1)
+
+    sampledf = df.sample(n)
+    images = get_df(mmdict, sampledf, size, nchannels, channels)
+    return images
     
     
 def getWell(mmdict, df, size, row, column, nchannels, channels=None):
