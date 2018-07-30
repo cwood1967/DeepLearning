@@ -1,3 +1,5 @@
+import time
+import os
 import tensorflow as tf
 import numpy as np
 import pandas as pd
@@ -39,20 +41,24 @@ class adversarial_autoencoder():
     def create_encoder(self, images, is_train, reuse=False):
 
         with tf.variable_scope("encoder", reuse=reuse):
-            self.encoder = network.encoder(images, self.latent_size,
-                                           self.droprate, is_train=is_train,
-                                           nfilters=self.enc_sizes, stdev=self.stdev,
-                                           denoise=None)
-         
-    def create_decoder(self, is_train, reuse=False):
+            encoder = network.encoder(images, self.latent_size,
+                                       self.droprate, is_train=is_train,
+                                       nfilters=self.enc_sizes, stdev=self.stdev,
+                                       denoise=None)
 
-        z = self.encoder
+        return encoder
+    
+
+    def create_decoder(self, sample_z,is_train, reuse=False):
+
+        z = sample_z
         with tf.variable_scope("decoder", reuse=reuse):
-            self.decoder= network.decoder(z, nchannels=self.nchannels,
-                                          width=self.width, droprate=self.droprate,
-                                          is_train=is_train, nfilters=self.dec_sizes,
-                                          stdev=self.stdev)
-
+            decoder= network.decoder(z, nchannels=self.nchannels,
+                                     width=self.width, droprate=self.droprate,
+                                     is_train=is_train, nfilters=self.dec_sizes,
+                                     stdev=self.stdev)
+        return decoder
+    
     
     def create_discriminator(self, z, reuse=False):
 
@@ -84,19 +90,19 @@ class adversarial_autoencoder():
         sample = np.random.normal(mu, sigma, size=size)
         return sample
 
-    def reconstruction_loss(self, images):
+    def reconstruction_loss(self, images, decoder):
 
-        r1 = tf.reduce_sum(tf.square(images- self.decoder), axis=(1,2,3))
+        r1 = tf.reduce_sum(tf.square(images- decoder), axis=(1,2,3))
         rloss = tf.reduce_mean(r1)
         self.rloss = rloss
         #return rloss
 
     
-    def discriminator_loss(self, sample_z):
+    def discriminator_loss(self, sample_z, encoder):
 
         smooth = 0.2
         sample_logits = self.create_discriminator(sample_z)
-        ae_logits = self.create_discriminator(self.encoder, reuse=True)
+        ae_logits = self.create_discriminator(encoder, reuse=True)
 
         sample_labels = (1 - smooth)*tf.ones_like(sample_logits)
         ae_labels = smooth + tf.zeros_like(ae_logits)
@@ -220,10 +226,24 @@ def create_mmdict(datadir):
 
     return mmdict, n_all_images
 
-def train():
+def train(niterations, display=False, display_int=100, report_int=100, title="train"):
 
     datadir = '/media/cjw/Data/cyto/mmCompensatedTifs/'
     params = setup()
+
+    tf1 = time.strftime("%Y-%m-%d-%H-%M-%S")
+    tf2 = time.strftime("checkpoint-%Y-%m-%d-%H-%M-%S")
+ 
+    savedir = '/media/cjw/Data/cyto/Checkpoints/' + tf1 + "_" + title + "/"
+    savedir += tf2 + '/'
+    if not os.path.exists(savedir):
+        os.makedirs(savedir)
+    #os.mkdir(savedir)
+    savename = savedir +  "autoencoder-{:d}x".format(params['latent_size'])
+
+    print("Using data from:", datadir)
+    print("Saving checkpoints to:", savename)
+ 
     
     mmdict, n_all_images = create_mmdict(datadir)
     df = create_df(mmdict)
@@ -231,22 +251,28 @@ def train():
     print(list(mmdict.keys()))
     print(df.head())
     w = params['width']
+
+    tf.reset_default_graph()
+
     images = tf.placeholder(tf.float32, (None, w, w, params['nchannels'])) 
     sample_z = tf.placeholder(tf.float32, (None, params['latent_size']))
     
     vn = adversarial_autoencoder(params)
 
-    vn.create_encoder(images, True)
-    vn.create_decoder(True)
+    encoder = vn.create_encoder(images, True)
+    decoder =vn.create_decoder(encoder, True)
     #vn.create_discriminator(sample_z)
-    vn.reconstruction_loss(images)
-    vn.discriminator_loss(sample_z)
+    vn.reconstruction_loss(images, decoder)
+    vn.discriminator_loss(sample_z, encoder)
     ae, d, g = vn.opt()
-    
+
+    saver = tf.train.Saver()
+
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
 
-        for i in range(16000):
+        step_counter = 0
+        for i in range(niterations):
             #print(i)
             batch_images = utils.get_sample(mmdict, df, params['batchsize'],
                                             params['width'], 
@@ -259,18 +285,20 @@ def train():
             sess.run(d, feed_dict={images:batch_images, sample_z:batch_z})
             sess.run(g, feed_dict={images:batch_images, sample_z:batch_z})
             sess.run(ae, feed_dict={images:batch_images})
-            
-            if i % 50 == 0:
+
+            step_counter += 1
+            if i % report_int == 0:
                 xd = vn.d_loss.eval({images:batch_images, sample_z:batch_z})
                 xg = vn.gen_loss.eval({images:batch_images, sample_z:batch_z})
                 xr = vn.rloss.eval({images:batch_images, sample_z:batch_z})
                 test_image = np.expand_dims(batch_images[23],axis=0)
-                encoded = vn.encoder.eval({images:test_image})
-                decoded = vn.decoder.eval({images:test_image})
+                encoded = encoder.eval({images:test_image})
+                decoded = decoder.eval({encoder:encoded})
                 decoded = np.squeeze(decoded)
-                xspace = vn.encoder.eval({images:batch_images})
+                xspace =  encoder.eval({images:batch_images})
+                print(i, xd, xg, xr)
                 
-                print(i, xd, xg, xr, encoded.shape)
+            if display and i % display_int == 0:
                 plt.figure(figsize=(8,2))
                 plt.subplot(2,6,1)
                 plt.imshow(np.squeeze(test_image)[:,:,0])
@@ -293,6 +321,10 @@ def train():
                 plt.subplot(2,3,6)
                 plt.hist(xspace.reshape((-1)), bins=25)
                 plt.show()
-
                 
+            if i % 1000 == 0:
+                saver.save(sess, savename, global_step=step_counter)
+                
+        saver.save(sess, savename, global_step=step_counter)  
         
+    print("Done")
