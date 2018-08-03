@@ -148,12 +148,21 @@ def train(mmdict, df, params, ndisp, saveto=None):
     
     opt = network.model_opt(loss, learning_rate)
     print(len(df), len(df)//batchsize, batchsize)
-    test_batch, _, _ = utils.getbatch(mmdict, df, len(df) // batchsize - 1,
-                                      batchsize, width, nchannels,
-                                      channels=channels)
+    
+    shuffle_df = df.sample(len(df))
+    
+    #test_batch, _, _ = utils.getbatch(mmdict, df, len(df) // batchsize - 1,
+    #                                  batchsize, width, nchannels,
+    #                                  channels=channels)
 
+    testdf = shuffle_df.iloc[:len(df)//10]
+    df = shuffle_df.iloc[len(df)//10:]
+    print(len(df), len(testdf))
     samp = 26
 
+    test_batch = utils.get_sample(mmdict, testdf, len(testdf),
+                                  width, nchannels,
+                                  channels=channels)
     saver = tf.train.Saver()
 
     with tf.Session() as sess:
@@ -166,10 +175,12 @@ def train(mmdict, df, params, ndisp, saveto=None):
                 start = 0
                 ib = 0
                 while start < len(df) // batchsize - 1:
-                    batch, wells, rownums = utils.getbatch(mmdict,
-                                                           df, start, batchsize,
-                                                           width, nchannels,
-                                                           channels=channels)
+                    ##### using this: get_sample(mmdict, df, n, size, nchannels, channels=None):
+                    ####batch, wells, rownums = utils.getbatch(mmdict,
+                    batch = utils.get_sample(mmdict, df, batchsize,
+                                             width, nchannels,
+                                             channels=channels)
+                    
                     nr = 0 #np.random.randint(0,4)
                     if nr > 0:
                         batch = np.rot90(batch, nr, (1,2)) 

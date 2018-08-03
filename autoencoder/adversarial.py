@@ -226,10 +226,14 @@ def create_mmdict(datadir):
 
     return mmdict, n_all_images
 
-def train(niterations, display=False, display_int=100, report_int=100, title="train"):
+def train(niterations, datadir=None, params=None,
+          display=False, display_int=100, report_int=100, title="train"):
 
-    datadir = '/media/cjw/Data/cyto/mmCompensatedTifs/'
-    params = setup()
+    if datadir is None:
+        datadir = '/media/cjw/Data/cyto/mmCompensatedTifs/'
+        
+    if params is None:
+        params = setup()
 
     tf1 = time.strftime("%Y-%m-%d-%H-%M-%S")
     tf2 = time.strftime("checkpoint-%Y-%m-%d-%H-%M-%S")
@@ -281,6 +285,8 @@ def train(niterations, display=False, display_int=100, report_int=100, title="tr
             
             batch_z = np.random.normal(0, 5, size=(params['batchsize'],
                                                    params['latent_size']))
+            ##batch_z = np.random.uniform(-10, 10, size=(params['batchsize'],
+            ##                                       params['latent_size']))
             sess.run(ae, feed_dict={images:batch_images})
             sess.run(d, feed_dict={images:batch_images, sample_z:batch_z})
             sess.run(g, feed_dict={images:batch_images, sample_z:batch_z})

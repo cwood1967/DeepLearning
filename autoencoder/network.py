@@ -167,6 +167,7 @@ def encoder(images, latent_size, droprate=0.7, is_train=True,
         #print(layers, he)
     return he
 
+
 def layer_upconv(x, nfilters, size, strides, stdev,
                  padding, tname, droprate, is_train):
     """
