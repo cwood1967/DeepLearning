@@ -69,9 +69,17 @@ class aae_clustering():
                                  activation=None,
                                  name='latent_space' + sknum)
 
-            hy = tf.layers.dense(h, self.nclusters,
-                                 kernel_initializer=network.get_init(self.stdev),
+            # hy = tf.layers.dense(h, self.latent_size,
+            #                      kernel_initializer=network.get_init(self.stdev),
+            #                      activation=None,
+            #                      name='clusters_1' + sknum)
+            # hy = tf.tanh(hy)
+            # hy = network.dropout(h, is_train, .6)
+            regularizer = tf.contrib.layers.l2_regularizer(scale=0.1)
+            hy = tf.layers.dense(h, self.nclusters, use_bias=False,
+                                 kernel_initializer=network.get_init(0.01*self.stdev),
                                  activation=None,
+                                 kernel_regularizer=regularizer,
                                  name='clusters' + sknum)
 
             encoder_y = tf.nn.softmax(hy)
@@ -121,8 +129,8 @@ class aae_clustering():
                                  kernel_initializer=network.get_init(self.stdev),
                                  name='decoder_out' + sknum)
 
-            dh0 = tf.minimum(dh0, 1)
-            sdh0 = tf.nn.relu(dh0)
+            #dh0 = tf.minimum(dh0, 1)
+            sdh0 = tf.sigmoid(dh0) #tf.nn.relu(dh0)
 
         return sdh0
     
@@ -145,18 +153,24 @@ class aae_clustering():
             h2 = network.leaky_relu(h2)
 
             last = tf.layers.dense(h2, 1,
-                                 kernel_initializer=self.d_initializer(self.stdev),
+                                 kernel_initializer=self.d_initializer(.5),
                                  activation=None,
                                  name="discrim03")
 
             return last
 
     
-    def reconstruction_loss(self, images, decoder):
+    def reconstruction_loss(self, images, decoder, encoder_y):
         r1 = tf.reduce_sum(tf.square(images- decoder), axis=(1,2,3))
+
+        #b = tf.reduce_mean(encoder_y, axis=1)
+        eloss = tf.reduce_max(tf.reduce_sum(encoder_y, axis=0))
+        eloss1 = tf.reduce_min(tf.reduce_sum(encoder_y, axis=0))
         rloss = tf.reduce_mean(r1)
         self.rloss = rloss
-        #return rloss
+        self.eloss = eloss - eloss1
+        #self.eloss1 = self.batchsize - eloss1
+        return rloss, eloss
 
     def discriminator_loss(self, sample_z, encoder):
         smooth = 0.2
@@ -185,7 +199,7 @@ class aae_clustering():
 
 
     def cluster_loss(self, y, encoder_y):
-        smooth = 0.1
+        smooth = 0.
         y_logits = self.create_discriminator(y, name="cluster")
         aey_logits = self.create_discriminator(encoder_y, reuse=True, name="cluster")
 
@@ -218,18 +232,25 @@ class aae_clustering():
         cyvars = [a for a in tvar if 'cluster' in a.name]
         aevars = encvars + decvars
 
+        c_d_loss = self.d_loss + self.c_loss
+        c_g_loss = self.gen_loss + self.c_gen_loss
+        
         self.ae_opt = tf.train.AdamOptimizer(self.learning_rate).minimize(
             self.rloss, var_list=aevars)
+        self.e_opt = tf.train.AdamOptimizer(self.learning_rate).minimize(
+            self.eloss, var_list=aevars)
+#        self.e1_opt = tf.train.AdamOptimizer(self.learning_rate).minimize(
+#            self.eloss1, var_list=aevars)
         self.d_opt = tf.train.AdamOptimizer(self.learning_rate).minimize(
-            self.d_loss, var_list=dzvars)
+            c_d_loss, var_list=dzvars + cyvars)
         self.g_opt = tf.train.AdamOptimizer(self.learning_rate).minimize(
-            self.gen_loss, var_list=encvars)
-        self.c_opt = tf.train.AdamOptimizer(self.learning_rate).minimize(
-            self.c_loss, var_list=cyvars)
-        self.gc_opt = tf.train.AdamOptimizer(self.learning_rate).minimize(
-            self.c_gen_loss, var_list=encvars)
+            c_g_loss, var_list=encvars)
+        # self.c_opt = tf.train.AdamOptimizer(self.learning_rate).minimize(
+        #     self.c_loss, var_list=cyvars)
+        # self.gc_opt = tf.train.AdamOptimizer(self.learning_rate).minimize(
+        #     self.c_gen_loss, var_list=encvars)
 
-        return self.ae_opt, self.d_opt, self.g_opt, self.c_opt, self.gc_opt
+        return self.ae_opt, self.d_opt, self.g_opt, self.e_opt #, self.c_opt, self.gc_opt
 
 
 def one_hot_batch(batchsize, nclusters):
@@ -309,10 +330,10 @@ def cluster(niterations, datadir=None, params=None,
     encoder_z, encoder_y = vn.create_encoder(images, True)
     decoder =vn.create_decoder(encoder_z, encoder_y, True)
     #vn.create_discriminator(sample_z)
-    vn.reconstruction_loss(images, decoder)
+    vn.reconstruction_loss(images, decoder, encoder_y)
     vn.discriminator_loss(sample_z, encoder_z)
     vn.cluster_loss(y, encoder_y) 
-    ae, d, g, c, gc = vn.opt()
+    ae, d, g, ee = vn.opt()
 
     saver = tf.train.Saver()
 
@@ -320,7 +341,14 @@ def cluster(niterations, datadir=None, params=None,
                                    params['width'], 
                                    params['nchannels'],
                                    channels=params['channels'])
-            
+
+    test_images2 = utils.get_sample(mmdict, df, 16,
+                               params['width'], 
+                               params['nchannels'],
+                               channels=params['channels'])
+
+    test_oh = one_hot_batch(params['batchsize'], params['nclusters'])
+    
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
 
@@ -332,41 +360,54 @@ def cluster(niterations, datadir=None, params=None,
                                             params['nchannels'],
                                             channels=params['channels'])
             
-            batch_z = np.random.normal(0, 5, size=(params['batchsize'],
+            batch_z = np.random.normal(0, 1, size=(params['batchsize'],
                                                    params['latent_size']))
 
             batch_y = one_hot_batch(params['batchsize'], params['nclusters'])
             
-            ##batch_z = np.random.uniform(-10, 10, size=(params['batchsize'],
+            ##batch_z = np.random.uniform(-10, 50, size=(params['batchsize'],
             ##                                       params['latent_size']))
-            sess.run(ae, feed_dict={images:batch_images})
-            sess.run(d, feed_dict={images:batch_images, sample_z:batch_z})
-            sess.run(c, feed_dict={images:batch_images, y:batch_y})
-            sess.run(g, feed_dict={images:batch_images, sample_z:batch_z})
-            sess.run(gc, feed_dict={images:batch_images, y:batch_y})
-            sess.run(ae, feed_dict={images:batch_images})
+            sess.run([ae, ee], feed_dict={images:batch_images})
+            sess.run(d, feed_dict={images:batch_images,
+                                   sample_z:batch_z, y:batch_y})
+#            sess.run(c, feed_dict={images:batch_images, y:batch_y})
+            sess.run(g, feed_dict={images:batch_images,
+                                   sample_z:batch_z, y:batch_y})
+#            sess.run(gc, feed_dict={images:batch_images, y:batch_y})
+            sess.run([ae, ee], feed_dict={images:batch_images})
 
             step_counter += 1
             if i % report_int == 0:
                 xd = vn.d_loss.eval({images:batch_images, sample_z:batch_z})
                 xg = vn.gen_loss.eval({images:batch_images, sample_z:batch_z})
-                xr = vn.rloss.eval({images:batch_images, sample_z:batch_z})
-                xc = vn.c_loss.eval({images:batch_images, y:batch_y}) 
+                xr = vn.rloss.eval({images:batch_images})
+                xe = vn.eloss.eval({images:batch_images})
+                xc = vn.c_loss.eval({images:batch_images, y:batch_y})
+                xcg = vn.c_gen_loss.eval({images:batch_images, y:batch_y})
                 txd = vn.d_loss.eval({images:test_images, sample_z:batch_z})
                 txg = vn.gen_loss.eval({images:test_images, sample_z:batch_z})
-                txr = vn.rloss.eval({images:test_images, sample_z:batch_z})
-                txc = vn.c_loss.eval({images:test_images, y:batch_y}) 
-
+                txr = vn.rloss.eval({images:test_images})
+                txc = vn.c_loss.eval({images:test_images, y:test_oh}) 
+                txcg = vn.c_gen_loss.eval({images:test_images, y:test_oh})
+                
                 test_image = np.expand_dims(test_images[ i % 16],axis=0)
                 encoded_z = encoder_z.eval({images:test_images})
                 encoded_y = encoder_y.eval({images:test_images})
+                encoded_y_b = encoder_y.eval({images:batch_images})
+
                 decoded = decoder.eval({encoder_z:encoded_z, encoder_y:encoded_y})
-                decoded = np.squeeze(decoded[10])
+                decoded = np.squeeze(decoded[i % 16])
                 xspace =  encoder_z.eval({images:batch_images})
-                print(i, xd, xg, xr, xc)
-                print(i, txd, txg, txr, txc)                
+                print(i, xd, xg, xr, xe, xc, xcg)
+                print(i, txd, txg, txr, txc, txcg)                
                 print(i, np.round(np.sum(encoded_y, axis=0)))
+                print(i, np.round(np.sum(encoded_y_b, axis=0)))
+                
+                encoded_y2 = encoder_y.eval({images:test_images2})                
                 print(np.argmax(encoded_y, axis=1))
+                print(np.argmax(encoded_y2, axis=1))
+                #print(batch_y)
+                #print(encoded_y)
             if display and i % display_int == 0:
                 plt.figure(figsize=(8,2))
                 plt.subplot(2,6,1)
