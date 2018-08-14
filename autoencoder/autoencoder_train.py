@@ -155,8 +155,8 @@ def train(mmdict, df, params, ndisp, saveto=None):
     #                                  batchsize, width, nchannels,
     #                                  channels=channels)
 
-    testdf = shuffle_df.iloc[:len(df)//10]
-    df = shuffle_df.iloc[len(df)//10:]
+    testdf = shuffle_df.iloc[:512]
+    df = shuffle_df.iloc[512:]
     print(len(df), len(testdf))
     samp = 26
 
