@@ -132,7 +132,7 @@ class aae_clustering():
             #dh0 = tf.minimum(dh0, 1)
             sdh0 = tf.sigmoid(dh0) #tf.nn.relu(dh0)
 
-        return sdh0
+        return sdh0, dh0
     
             
     def create_discriminator(self, w, reuse=False, name="discriminator"):
@@ -160,13 +160,20 @@ class aae_clustering():
             return last
 
     
-    def reconstruction_loss(self, images, decoder, encoder_y):
-        r1 = tf.reduce_sum(tf.square(images- decoder), axis=(1,2,3))
+    def reconstruction_loss(self, images, decoder, sdecoder, encoder_y):
 
+        cw = tf.constant([.1, 8., .1, .2], dtype=tf.float32)
+        
+        r = images - sdecoder
+        #r1 = tf.reduce_sum(tf.square(r), axis=(1,2,3))
+        r1 = tf.reduce_sum(tf.square(r), axis=(1,2)) 
+        #r1 =tf.nn.sigmoid_cross_entropy_with_logits(logits=decoder,
+        #                                            labels=images)
         #b = tf.reduce_mean(encoder_y, axis=1)
         eloss = tf.reduce_max(tf.reduce_sum(encoder_y, axis=0))
         eloss1 = tf.reduce_min(tf.reduce_sum(encoder_y, axis=0))
-        rloss = tf.reduce_mean(r1)
+        rloss = tf.reduce_mean(r1, axis=0)
+        rloss = tf.reduce_sum(tf.multiply(cw, rloss))
         self.rloss = rloss
         self.eloss = eloss - eloss1
         #self.eloss1 = self.batchsize - eloss1
@@ -328,9 +335,9 @@ def cluster(niterations, datadir=None, params=None,
     vn = aae_clustering(params)
 
     encoder_z, encoder_y = vn.create_encoder(images, True)
-    decoder =vn.create_decoder(encoder_z, encoder_y, True)
+    sdecoder, decoder =vn.create_decoder(encoder_z, encoder_y, True)
     #vn.create_discriminator(sample_z)
-    vn.reconstruction_loss(images, decoder, encoder_y)
+    vn.reconstruction_loss(images, decoder, sdecoder, encoder_y)
     vn.discriminator_loss(sample_z, encoder_z)
     vn.cluster_loss(y, encoder_y) 
     ae, d, g, ee = vn.opt()
@@ -395,7 +402,7 @@ def cluster(niterations, datadir=None, params=None,
                 encoded_y = encoder_y.eval({images:test_images})
                 encoded_y_b = encoder_y.eval({images:batch_images})
 
-                decoded = decoder.eval({encoder_z:encoded_z, encoder_y:encoded_y})
+                decoded = sdecoder.eval({encoder_z:encoded_z, encoder_y:encoded_y})
                 decoded = np.squeeze(decoded[i % 16])
                 xspace =  encoder_z.eval({images:batch_images})
                 print(i, xd, xg, xr, xe, xc, xcg)
