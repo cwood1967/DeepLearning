@@ -6,6 +6,8 @@ import pandas as pd
 import autoencoder.network as network
 import autoencoder.utils as utils
 
+from sklearn.cluster import KMeans
+
 from matplotlib import pyplot as plt
 
 class adversarial_autoencoder():
@@ -183,6 +185,7 @@ def create_df(mmdict):
     for key in mmdict.keys():
         mm = mmdict[key]
         n = mm.shape[0]
+        w = mm.shape[1]
         print(n)
         file = n*[key[0:-3]]
         fid = range(n)
@@ -191,8 +194,8 @@ def create_df(mmdict):
         #row = n*[0]
         #column = n*[0]
         #field = n*[0]
-        yc = n*[32]
-        xc = n*[32]
+        yc = n*[w//2]
+        xc = n*[w//2]
         #well = n*[0]
         ids = np.arange(idx, idx + n, 1) #all_ids[idx:idx + n]
         idx += n
@@ -333,4 +336,32 @@ def train(niterations, datadir=None, params=None,
                 
         saver.save(sess, savename, global_step=step_counter)  
         
+
     print("Done")
+    return {'ae':ae, 'encoder':encoder, 'decoder':decoder,
+            'session':sess, 'saver':saver}
+
+
+def cluster(nclusters, trained, niterations,
+            display=False, display_int=100, report_int=100, title="cluster"):
+
+
+    images = tf.placeholder(tf.float32, (None, w, w, params['nchannels'])) 
+    sample_z = tf.placeholder(tf.float32, (None, params['latent_size']))
+
+    ## need to do clustering using KMeans on all of the latent spaces
+    ## or just a large random sample
+
+    cluster_batch = utils.get_sample(mmdict, 
+    kmeans = KMeans(nclusters=nclusters, n_init=20)
+    for i in range(niterations):
+
+        batch_images = utils.get_sample(mmdict, df, params['batchsize'],
+                                        params['width'], 
+                                        params['nchannels'],
+                                        channels=params['channels'])
+
+        
+        ## do the training on autoencoder
+        sess.run(ae, feed_dict={images:batch_images})
+        
