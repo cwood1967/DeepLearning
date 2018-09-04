@@ -10,6 +10,7 @@ from sklearn.cluster import KMeans
 
 from matplotlib import pyplot as plt
 
+
 class adversarial_autoencoder():
 
     def __init__(self, params):
@@ -153,110 +154,228 @@ class adversarial_autoencoder():
             self.gen_loss, var_list=encvars)
 
         return self.ae_opt, self.d_opt, self.g_opt
+
+''' end of adversarial_autoencoder class'''
+
+class training():
+    def __init__(self, params, datadir, title):
+        if params is None:
+            self.params = self.setup()
+        else:
+            self.params = params
+
+        self.datadir = datadir
+        self.title = title
+        self.mmdict, self.n_all_images = self.create_mmdict(self.datadir)
+        self.df = self.create_df(self.mmdict)
+
+        tf1 = time.strftime("%Y-%m-%d-%H-%M-%S")
+        tf2 = time.strftime("checkpoint-%Y-%m-%d-%H-%M-%S")
+ 
+        savedir = '/media/cjw/Data/cyto/Checkpoints/' + tf1 + "_" + title + "/"
+        savedir += tf2 + '/'
+        self.savename = savedir +  "autoencoder-{:d}x".format(params['latent_size'])
+        print("Using data from:", self.datadir)
+        print("Saving checkpoints to:", self.savename)
+ 
+        if not os.path.exists(savedir):
+            os.makedirs(savedir)
+
+    def train(self, gpu=True, display=False, display_int=100,
+              report_int=100, niterations=1000):
+
+        self.display_int = display_int
+        self.display = display
+        self.report_int = report_int
         
-def setup():
-    esize = [(128,3), (256, 3), (512,3)]
-    dsize = list(reversed(esize))
+        tf.reset_default_graph()
+        w = self.params['width']
+        self.images = tf.placeholder(tf.float32,
+                                     (None, w, w, self.params['nchannels'])) 
+        self.sample_z = tf.placeholder(tf.float32,
+                                       (None, self.params['latent_size']))
 
-    params =dict()
-    
-    params['width'] = 32
-    params['height'] = 32
-    params['nchannels'] = 4
-    params['channels'] = [0,1,3,4]
-    params['nepochs'] = 20
-    params['batchsize'] = 256
-    params['learning_rate'] = 0.0003
-    params['restore'] = False
-    params['latent_size'] = 64
-    params['enc_sizes'] = esize 
-    params['dec_sizes'] = dsize
-    params['droprate'] = 0.85
-    params['stdev'] = 0.04
-    params['denoise'] = False
-    params['slam'] = 0
+        self.vn = adversarial_autoencoder(self.params)
+        self.encoder = self.vn.create_encoder(self.images, True)
+        self.decoder = self.vn.create_decoder(self.encoder, True)
+        self.vn.reconstruction_loss(self.images, self.decoder)
+        self.vn.discriminator_loss(self.sample_z, self.encoder)
+        self.ae, self.d, self.g = self.vn.opt()
 
-    return params
+        self.saver = tf.train.Saver()
 
-def create_df(mmdict):
-    #all_ids =  range(n_all_images)
-    idx = 0
-    dataframes = list()
-    for key in mmdict.keys():
-        mm = mmdict[key]
-        n = mm.shape[0]
-        w = mm.shape[1]
-        print(n)
-        file = n*[key[0:-3]]
-        fid = range(n)
-        mmfile = n*[key]
-        #plate = n*[0]
-        #row = n*[0]
-        #column = n*[0]
-        #field = n*[0]
-        yc = n*[w//2]
-        xc = n*[w//2]
-        #well = n*[0]
-        ids = np.arange(idx, idx + n, 1) #all_ids[idx:idx + n]
-        idx += n
-        df = pd.DataFrame({'id':ids, 'fid':fid, 'file':file, 'mmfile':mmfile,
-                          'yc':yc, 'xc':xc})
+        if gpu is False:
+            config = tf.ConfigProto(
+                device_count = {'GPU': 0})
+        else:
+            config = tf.ConfigProto(
+                device_count = {'GPU': 1})
+            
+        self.sess = tf.Session(config=config)
+        self.sess.run(tf.global_variables_initializer())
 
-        dataframes.append(df)
+        self.test_images = utils.get_sample(self.mmdict, self.df,
+                                       32, w, self.params['nchannels'],
+                                       channels=self.params['channels'])
 
-    p_df = pd.concat(dataframes, ignore_index=True)
-    return p_df
+        ri = 0
+        for i in range(niterations):
+            batch_images = self.get_batch(self.params['batchsize'])
+            batch_z = np.random.normal(0, 1,
+                                       size=(self.params['batchsize'],
+                                             self.params['latent_size']))
 
-def create_mmdict(datadir):
-    mmdict = dict()
-    mmfiles = utils.list_mmfiles(datadir)
-    n_all_images = 0
-    
-    for mmfilename in mmfiles:
-        mmheader = np.memmap(mmfilename, dtype="int32", mode='r',
-                             shape=(4,))
+            self.sess.run(self.ae, feed_dict={self.images:batch_images})
+            self.sess.run(self.d,
+                          feed_dict={self.images:batch_images,
+                                     self.sample_z:batch_z})
+            self.sess.run(self.g,
+                          feed_dict={self.images:batch_images,
+                                     self.sample_z:batch_z})
+            self.sess.run(self.ae,
+                          feed_dict={self.images:batch_images})
 
-        header_shape = mmheader.shape
-        xshape = [mmheader[0], mmheader[1], mmheader[2], mmheader[3]]
-        xshape = tuple(xshape)
-        del mmheader
-        n_all_images += xshape[0]
 
-        m3 = np.memmap(mmfilename, dtype='float32', offset=128,
-                  mode='r', shape=xshape)
-        key = mmfilename.split("/")[-1]
-        mmdict[key] = m3
+            if i % self.report_int == 0:
+                xd = self.vn.d_loss.eval({self.images:batch_images,
+                                          self.sample_z:batch_z},
+                                         session=self.sess)
+                xg = self.vn.gen_loss.eval({self.images:batch_images,
+                                            self.sample_z:batch_z},
+                                           session=self.sess)
+                xr = self.vn.rloss.eval({self.images:batch_images,
+                                         self.sample_z:batch_z},
+                                        session=self.sess)
 
-    return mmdict, n_all_images
+                print(i, xd, xg, xr)
+                
+            if self.display and i % self.display_int == 0:
+                print("display")
+                test_image = np.expand_dims(self.test_images[ri],axis=0)
+                ri += 1
+                if ri == len(self.test_images):
+                    ri = 0
+
+                self.idisplay(test_image, batch_z)
+                
+            if i % 1000 == 0:
+                self.saver.save(self.sess, self.savename, global_step=i)
+
+        print("Done")
+                                    
+    def get_batch(self, n):
+        batch_images = utils.get_sample(self.mmdict, self.df, n,
+                                self.params['width'], 
+                                self.params['nchannels'],
+                                channels=self.params['channels'])
+        return batch_images
+
+    def idisplay(self, test_image, batch_z):
+        encoded = self.encoder.eval({self.images:test_image}, session=self.sess)
+        decoded = self.decoder.eval({self.encoder:encoded}, session=self.sess)
+        decoded = np.squeeze(decoded)
+        xspace =  self.encoder.eval({self.images:
+                                     self.get_batch(self.params['batchsize'])},
+                                    session=self.sess)
+
+        inum = 1
+        plt.figure(figsize=(8,2))
+        nc = self.params['nchannels']
+        for i in range(nc):
+            plt.subplot(2, nc + 2, inum)
+            plt.imshow(np.squeeze(test_image)[:,:, i])
+            plt.subplot(2, nc + 2, inum + nc + 2)
+            plt.imshow(decoded[:,:, i])
+            inum += 1
+        
+        plt.subplot(2, 3, 3)
+        plt.hist(batch_z.reshape((-1)), bins=25)
+        plt.subplot(2,3,6)
+        plt.hist(xspace.reshape((-1)), bins=25)
+        plt.show()
+        
+    def setup(self):
+        esize = [(128,3), (256, 3), (512,3)]
+        dsize = list(reversed(esize))
+
+        params =dict()
+
+        params['width'] = 32
+        params['height'] = 32
+        params['nchannels'] = 4
+        params['channels'] = [0,1,3,4]
+        params['nepochs'] = 20
+        params['batchsize'] = 256
+        params['learning_rate'] = 0.0003
+        params['restore'] = False
+        params['latent_size'] = 64
+        params['enc_sizes'] = esize 
+        params['dec_sizes'] = dsize
+        params['droprate'] = 0.85
+        params['stdev'] = 0.04
+        params['denoise'] = False
+        params['slam'] = 0
+
+        return params
+
+
+    def create_df(self, mmdict):
+        idx = 0
+        dataframes = list()
+        for key in mmdict.keys():
+            mm = mmdict[key]
+            n = mm.shape[0]
+            w = mm.shape[1]
+            file = n*[key[0:-3]]
+            fid = range(n)
+            mmfile = n*[key]
+            yc = n*[w//2]
+            xc = n*[w//2]
+            ids = np.arange(idx, idx + n, 1) #all_ids[idx:idx + n]
+            idx += n
+            df = pd.DataFrame({'id':ids, 'fid':fid, 'file':file, 'mmfile':mmfile,
+                              'yc':yc, 'xc':xc})
+
+            dataframes.append(df)
+
+        p_df = pd.concat(dataframes, ignore_index=True)
+        return p_df
+
+    def create_mmdict(self, datadir):
+        mmdict = dict()
+        mmfiles = utils.list_mmfiles(datadir)
+        n_all_images = 0
+
+        for mmfilename in mmfiles:
+            mmheader = np.memmap(mmfilename, dtype="int32", mode='r',
+                                 shape=(4,))
+
+            header_shape = mmheader.shape
+            xshape = [mmheader[0], mmheader[1], mmheader[2], mmheader[3]]
+            xshape = tuple(xshape)
+            del mmheader
+            n_all_images += xshape[0]
+
+            m3 = np.memmap(mmfilename, dtype='float32', offset=128,
+                      mode='r', shape=xshape)
+            key = mmfilename.split("/")[-1]
+            mmdict[key] = m3
+
+        return mmdict, n_all_images
+
+''' done with training class'''
 
 def train(niterations, datadir=None, params=None,
           display=False, display_int=100, report_int=100, title="train"):
 
+
     if datadir is None:
         datadir = '/media/cjw/Data/cyto/mmCompensatedTifs/'
-        
-    if params is None:
-        params = setup()
 
-    tf1 = time.strftime("%Y-%m-%d-%H-%M-%S")
-    tf2 = time.strftime("checkpoint-%Y-%m-%d-%H-%M-%S")
- 
-    savedir = '/media/cjw/Data/cyto/Checkpoints/' + tf1 + "_" + title + "/"
-    savedir += tf2 + '/'
-    if not os.path.exists(savedir):
-        os.makedirs(savedir)
+    trainer = training(params, datadir, title=title)
+
     #os.mkdir(savedir)
-    savename = savedir +  "autoencoder-{:d}x".format(params['latent_size'])
-
-    print("Using data from:", datadir)
-    print("Saving checkpoints to:", savename)
- 
     
-    mmdict, n_all_images = create_mmdict(datadir)
-    df = create_df(mmdict)
-    
-    print(list(mmdict.keys()))
-    print(df.head())
     w = params['width']
 
     tf.reset_default_graph()
@@ -352,7 +471,7 @@ def cluster(nclusters, trained, niterations,
     ## need to do clustering using KMeans on all of the latent spaces
     ## or just a large random sample
 
-    cluster_batch = utils.get_sample(mmdict, 
+#    cluster_batch = utils.get_sample(mmdict, 
     kmeans = KMeans(nclusters=nclusters, n_init=20)
     for i in range(niterations):
 
