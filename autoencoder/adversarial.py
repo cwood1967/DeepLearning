@@ -365,6 +365,83 @@ class training():
 
 ''' done with training class'''
 
+
+class aae_loader():
+
+    def __init__(self, params, datadir, checkpointfile, checkpointdir):
+        self.params = params 
+        self.checkpointfile = checkpointfile
+        self.checkpointdir = checkpointdir
+        self.datadir = datadir
+        self.mmdict, self.n_all_images = self.create_mmdict(self.datadir)
+        self.df = self.create_df(self.mmdict)
+        
+    def load(self):
+
+        w = self.params['width']
+        self.images = tf.placeholder(tf.float32,
+                                     (None, w, w, self.params['nchannels']))
+
+        self.sample_z = tf.placeholder(tf.float32,
+                                       (None, self.params['latent_size']))
+        self.vn = adversarial_autoencoder(self.params)
+        self.encoder = self.vn.create_encoder(self.images, True)
+        self.decoder = self.vn.create_decoder(self.encoder, True)
+        self.vn.reconstruction_loss(self.images, self.decoder)
+        self.vn.discriminator_loss(self.sample_z, self.encoder)
+        self.ae, self.d, self.g = self.vn.opt()
+
+        self.saver = tf.train.Saver()
+        self.sess = tf.Session()
+        self.sess.run(tf.global_variables_initializer())
+        self.saver.restore(self.sess, self.checkpointfile)
+
+    def create_df(self, mmdict):
+        idx = 0
+        dataframes = list()
+        for key in mmdict.keys():
+            mm = mmdict[key]
+            n = mm.shape[0]
+            w = mm.shape[1]
+            file = n*[key[0:-3]]
+            fid = range(n)
+            mmfile = n*[key]
+            yc = n*[w//2]
+            xc = n*[w//2]
+            ids = np.arange(idx, idx + n, 1) #all_ids[idx:idx + n]
+            idx += n
+            df = pd.DataFrame({'id':ids, 'fid':fid, 'file':file, 'mmfile':mmfile,
+                              'yc':yc, 'xc':xc})
+
+            dataframes.append(df)
+
+        p_df = pd.concat(dataframes, ignore_index=True)
+        return p_df
+
+    def create_mmdict(self, datadir):
+        mmdict = dict()
+        mmfiles = utils.list_mmfiles(datadir)
+        n_all_images = 0
+
+        for mmfilename in mmfiles:
+            mmheader = np.memmap(mmfilename, dtype="int32", mode='r',
+                                 shape=(4,))
+
+            header_shape = mmheader.shape
+            xshape = [mmheader[0], mmheader[1], mmheader[2], mmheader[3]]
+            xshape = tuple(xshape)
+            del mmheader
+            n_all_images += xshape[0]
+
+            m3 = np.memmap(mmfilename, dtype='float32', offset=128,
+                      mode='r', shape=xshape)
+            key = mmfilename.split("/")[-1]
+            mmdict[key] = m3
+
+        return mmdict, n_all_images
+        
+''' done with reload class '''
+
 def train(niterations, datadir=None, params=None,
           display=False, display_int=100, report_int=100, title="train"):
 
