@@ -1,6 +1,8 @@
 import tensorflow as tf
 import numpy as np
-from sklearn.cluster import KMeans
+from sklearn.cluster import KMeans, DBSCAN
+
+from matplotlib import pyplot as plt 
 
 from tensorflow.keras.layers import Layer
 from tensorflow.keras.losses import KLD
@@ -37,11 +39,32 @@ class cluster_layer(Layer):
         each of the 'points' to the cluster centers and give a soft
         probability for the prediected cluster
         """
-
+        '''
         x = tf.expand_dims(inputs, axis=1)
-        qn = 1./(1.0 + tf.square(tf.norm((x - self.clusters), axis=2)))
-
-        q = qn/tf.reduce_sum(qn)
+        qn = 1./(1.0 + (tf.norm((x - self.clusters), axis=2)))
+        
+        nrlz = tf.reduce_sum(qn, axis=1)
+        qnt = tf.transpose(qn)
+        qt = tf.divide(qnt, nrlz)
+        q = tf.transpose(qt)
+        print("CALL ", qn.shape, q.shape)
+        '''
+        '''try to use softmax'''
+        '''
+        x = tf.expand_dims(inputs, axis=1)
+        kern = x - self.clusters
+        q = 1 - tf.nn.softmax(tf.norm(kern, axis=2))
+        '''
+        '''try '''
+        
+        x = tf.expand_dims(inputs, axis=1)
+        kern = x - self.clusters
+        kern = kern*kern
+        kern = tf.reduce_sum(kern, axis=2)
+        kern = 1 + kern
+        kern = 1./kern
+        q = tf.transpose(tf.transpose(kern)/tf.reduce_sum(kern, axis=1))
+        print("CALL ",  q.shape, x.shape)
         return q
         
         
@@ -84,7 +107,7 @@ def cluster_target(q):
 def tf_cluster_target(q):
     with tf.variable_scope('cluster'):
         qq = tf.square(q)
-        qn = tf.reduce_sum(qq, axis=0)
+        qn = tf.reduce_sum(q, axis=0)
         w = tf.divide(qq, qn)
         wt = tf.transpose(w)
         ws = tf.reduce_sum(w, axis=1)
@@ -102,7 +125,7 @@ def cluster_loss(images, encoder, decoder, cluster):
 
         closs = xentropy - entropy
 
-        kd = tf.keras.losses.KLD(p, cluster)
+        kd = tf.reduce_sum(tf.keras.losses.KLD(p, cluster))
         loss = rloss + kd #+ closs
     return loss, rloss
     
@@ -115,7 +138,7 @@ def cluster_train(trained):
 
     w = trained.params['width']
     sample_images = utils.get_sample(trained.mmdict, trained.df,
-                                     4000, w,
+                                     12000, w,
                                      trained.params['nchannels'],
                                      channels=trained.params['channels'])
 
@@ -126,13 +149,28 @@ def cluster_train(trained):
     Z = trained.encoder.eval({trained.images:sample_images}, session=trained.sess)
 
     k = trained.params['nclusters']
-    kmeans = KMeans(n_clusters=k, n_init=20)
-    km = kmeans.fit_predict(Z)
-    km_last = np.copy(km)
-    iweights = kmeans.cluster_centers_
-
+    #kmeans = KMeans(n_clusters=k, n_init=20)
+    dbscan = DBSCAN(eps=1.2)
+    db = dbscan.fit(Z)
+    print(db)
+    core = dbscan.core_sample_indices_
+    nc = len(core)
+    print("N cores", nc)
+    
+    k = nc
+    #km = kmeans.fit_predict(Z)
+    
+    print("original clusters")
+    print(np.histogram(db.labels_, k)[0])
+    #plt.hist(km, bins=20)
+    #plt.show()
+    km_last = np.copy(db)
+    #iweights = kmeans.cluster_centers_
+    iweights = Z[core]
+    plt.hist(np.reshape(iweights, (-1)))
+    plt.show()
     with tf.variable_scope("cluster"):
-        acluster = cluster_layer(k=k, weights=iweights)
+        acluster = cluster_layer(k=nc, weights=iweights)
         cluster = acluster.apply(trained.encoder)
 
         '''use this to calc the z and reconstruction when ready for batches'''
@@ -142,7 +180,7 @@ def cluster_train(trained):
 
         closs, rloss = cluster_loss(trained.images, trained.encoder, trained.decoder, cluster)
 
-        copt = tf.train.AdamOptimizer(trained.params['learning_rate']).minimize(
+        copt = tf.train.AdamOptimizer(1*trained.params['learning_rate']).minimize(
             closs)
 
     tvar = tf.trainable_variables()
@@ -153,18 +191,31 @@ def cluster_train(trained):
     trained.sess.run(tf.variables_initializer(cvars))
     #trained.load()
     
-    for i in range(10000):
+    for i in range(12000):
 
         batch = utils.get_sample(trained.mmdict, trained.df,
                                  trained.params['batchsize'], w,
                                  trained.params['nchannels'],
                                  channels=trained.params['channels'])
         #print(batch.shape, trained.images)
-        if i % 100 == 0:
+        trained.sess.run(copt, feed_dict={trained.images:batch})
+        if i % 1000 == 0:
             zloss, zrloss,_ = trained.sess.run([closs, rloss, copt],
                                                feed_dict={trained.images:batch})
             print(i, zloss, zrloss)
-
+            ze = trained.encoder.eval({trained.images:sample_images}, session=trained.sess)
+            #print(np.histogram(ze, 10)[0])
+            qx = cluster.eval({trained.encoder:ze}, session=trained.sess)
+            kmp = np.argmax(qx, axis=1)
+            print(np.histogram(kmp, nc)[0])
+            
+            #print(np.sum(qx[0:5,:], axis=1))
+            
+            
+            delta_label = np.sum(kmp != km_last).astype(np.float32) / kmp.shape[0]
+            km_last = kmp
+            print(delta_label)
+            
     res = cluster.eval({trained.images:batch}, session = trained.sess)
     print(res, res.shape)
     bZ = trained.encoder.eval({trained.images:sample_images}, session=trained.sess)
