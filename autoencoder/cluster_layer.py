@@ -149,24 +149,24 @@ def cluster_train(trained):
     Z = trained.encoder.eval({trained.images:sample_images}, session=trained.sess)
 
     k = trained.params['nclusters']
-    #kmeans = KMeans(n_clusters=k, n_init=20)
-    dbscan = DBSCAN(eps=1.2)
-    db = dbscan.fit(Z)
-    print(db)
-    core = dbscan.core_sample_indices_
-    nc = len(core)
-    print("N cores", nc)
+    kmeans = KMeans(n_clusters=k, n_init=20)
+    #dbscan = DBSCAN(eps=1.2)
+    #db = dbscan.fit(Z)
+    #print(db)
+    #core = dbscan.core_sample_indices_
+    nc = trained.params['nclusters']
+    #print("N cores", nc)
     
     k = nc
-    #km = kmeans.fit_predict(Z)
+    km = kmeans.fit_predict(Z)
     
     print("original clusters")
-    print(np.histogram(db.labels_, k)[0])
+    print(np.histogram(km, k)[0])
     #plt.hist(km, bins=20)
     #plt.show()
-    km_last = np.copy(db)
-    #iweights = kmeans.cluster_centers_
-    iweights = Z[core]
+    km_last = np.copy(km)
+    iweights = kmeans.cluster_centers_
+    #iweights = Z[core]
     plt.hist(np.reshape(iweights, (-1)))
     plt.show()
     with tf.variable_scope("cluster"):

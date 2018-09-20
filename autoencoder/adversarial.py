@@ -283,9 +283,15 @@ class training():
         nc = self.params['nchannels']
         for i in range(nc):
             plt.subplot(2, nc + 2, inum)
-            plt.imshow(np.squeeze(test_image)[:,:, i])
+            if nc == 1:
+                di = np.squeeze(test_image)
+                de = decoded
+            else:
+                di = np.squeeze(test_image)[:,:, i]
+                de = decoded[:,:,i]
+            plt.imshow(di)
             plt.subplot(2, nc + 2, inum + nc + 2)
-            plt.imshow(decoded[:,:, i])
+            plt.imshow(de)
             inum += 1
         
         plt.subplot(2, 3, 3)
@@ -540,8 +546,7 @@ def train(niterations, datadir=None, params=None,
 
 def cluster(nclusters, trained, niterations,
             display=False, display_int=100, report_int=100, title="cluster"):
-
-
+    
     images = tf.placeholder(tf.float32, (None, w, w, params['nchannels'])) 
     sample_z = tf.placeholder(tf.float32, (None, params['latent_size']))
 
