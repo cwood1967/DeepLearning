@@ -150,10 +150,6 @@ def cluster_train(trained):
 
     k = trained.params['nclusters']
     kmeans = KMeans(n_clusters=k, n_init=20)
-    #dbscan = DBSCAN(eps=1.2)
-    #db = dbscan.fit(Z)
-    #print(db)
-    #core = dbscan.core_sample_indices_
     nc = trained.params['nclusters']
     #print("N cores", nc)
     
