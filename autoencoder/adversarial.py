@@ -214,13 +214,25 @@ class training():
         self.sess = tf.Session(config=config)
         self.sess.run(tf.global_variables_initializer())
 
-        self.test_images = utils.get_sample(self.mmdict, self.df,
-                                       32, w, self.params['nchannels'],
+        x1 = utils.get_sample(self.mmdict, self.df,
+                                       64, w, self.params['nchannels'],
                                        channels=self.params['channels'])
 
+        xn = x1 - x1.mean(axis=(1,2), keepdims=True)
+        xs = xn.std(axis=(1,2), keepdims=True)
+        xns = xn/xs
+        self.test_images = xns
+        print(x1.shape, xn.shape, xs.shape, xns.shape)
         ri = 0
         for i in range(niterations):
-            batch_images = self.get_batch(self.params['batchsize'])
+            
+            b1 = self.get_batch(self.params['batchsize'])
+            bn = b1 - b1.mean(axis=(1,2), keepdims=True)
+            bs = bn.std(axis=(1,2), keepdims=True)
+            bns = bn/bs 
+            
+            batch_images = bns #self.get_batch(self.params['batchsize'])
+            
             batch_z = np.random.normal(0, 1,
                                        size=(self.params['batchsize'],
                                              self.params['latent_size']))

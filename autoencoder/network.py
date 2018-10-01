@@ -259,9 +259,10 @@ def decoder(z, nchannels=2, width=64, droprate=.7, is_train=True,
         
         #sdh0 = tf.nn.sigmoid(dh0)  # , name='decoder_image')
         #sdh0 = tf.nn.tanh(dh0)
-        dh0 = tf.minimum(dh0, 1)
-        print("dh0", dh0.shape)
-        sdh0 = tf.nn.relu(dh0)
+        sdh0 = dh0
+        #dh0 = tf.minimum(dh0, 1)
+        #print("dh0", dh0.shape)
+        #sdh0 = tf.nn.relu(dh0)
         #sdh0 = (dh0 - rmin)/(rmax - rmin) 
         #print(layers, dh0)
     return sdh0
