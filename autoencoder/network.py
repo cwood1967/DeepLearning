@@ -165,6 +165,7 @@ def encoder(images, latent_size, droprate=0.7, is_train=True,
                              activation=None,
                              name='latent_space' + sknum)
         #print(layers, he)
+    print(he)
     return he
 
 
@@ -264,7 +265,7 @@ def decoder(z, nchannels=2, width=64, droprate=.7, is_train=True,
         #print("dh0", dh0.shape)
         #sdh0 = tf.nn.relu(dh0)
         #sdh0 = (dh0 - rmin)/(rmax - rmin) 
-        #print(layers, dh0)
+        print(sdh0)
     return sdh0
 
 def mixture(enc_stack, nclusters):

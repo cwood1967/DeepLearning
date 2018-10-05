@@ -145,7 +145,8 @@ class adversarial_autoencoder():
         dvars = [a for a in tvar if 'discriminator' in a.name]
         aevars = encvars + decvars
 
-        print(aevars)
+        for v in aevars:
+            print(v)
         self.ae_opt = tf.train.AdamOptimizer(self.learning_rate).minimize(
             self.rloss, var_list=aevars)
         self.d_opt = tf.train.AdamOptimizer(self.learning_rate).minimize(
