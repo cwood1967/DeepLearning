@@ -183,7 +183,7 @@ class training():
             os.makedirs(savedir)
 
     def train(self, gpu=True, display=False, display_int=100,
-              report_int=100, niterations=1000):
+              report_int=100, dfunc='idisplay',niterations=1000):
 
         self.display_int = display_int
         self.display = display
@@ -222,7 +222,7 @@ class training():
         xn = x1 - x1.mean(axis=(1,2), keepdims=True)
         xs = xn.std(axis=(1,2), keepdims=True)
         xns = xn/xs
-        self.test_images = xns
+        self.test_images = x1 #xns
         print(x1.shape, xn.shape, xs.shape, xns.shape)
         ri = 0
         for i in range(niterations):
@@ -232,7 +232,7 @@ class training():
             bs = bn.std(axis=(1,2), keepdims=True)
             bns = bn/bs 
             
-            batch_images = bns #self.get_batch(self.params['batchsize'])
+            batch_images = b1 #bns #self.get_batch(self.params['batchsize'])
             
             batch_z = np.random.normal(0, 1,
                                        size=(self.params['batchsize'],
@@ -269,7 +269,12 @@ class training():
                 if ri == len(self.test_images):
                     ri = 0
 
-                self.idisplay(test_image, batch_z)
+                if dfunc=='idisplay':
+                    self.idisplay(test_image, batch_z)
+                elif dfunc=='idisplay3':
+                    self.idisplay3(test_image, batch_z)
+                else:
+                    pass
                 
             if i % 1000 == 0:
                 self.saver.save(self.sess, self.savename, global_step=i)
@@ -283,6 +288,33 @@ class training():
                                 channels=self.params['channels'])
         return batch_images
 
+    def idisplay3(self, test_image, batch_z):
+        encoded = self.encoder.eval({self.images:test_image}, session=self.sess)
+        decoded = self.decoder.eval({self.encoder:encoded}, session=self.sess)
+        decoded = np.squeeze(decoded)
+        xspace =  self.encoder.eval({self.images:
+                                     self.get_batch(self.params['batchsize'])},
+                                    session=self.sess)
+
+
+        plt.figure(figsize=(8,4))
+        nc = self.params['nchannels']
+        
+        plt.subplot(2, 2, 1)
+        
+        di = np.squeeze(test_image)
+        de = decoded
+        plt.imshow(di)
+        plt.subplot(2, 2, 2)
+        plt.imshow(de)
+        
+        plt.subplot(2, 2,3)
+        plt.hist(batch_z.reshape((-1)), bins=25)
+        plt.subplot(2,2,4)
+        plt.hist(xspace.reshape((-1)), bins=25)
+        plt.show()
+
+        
     def idisplay(self, test_image, batch_z):
         encoded = self.encoder.eval({self.images:test_image}, session=self.sess)
         decoded = self.decoder.eval({self.encoder:encoded}, session=self.sess)
