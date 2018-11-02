@@ -420,6 +420,11 @@ def sparse_loss(images, sdh0, h, slam):
     rloss = tf.reduce_mean(rloss)
     omega = slam*tf.reduce_sum(tf.abs(h))
     
+#    rc1 = sdh0[:,:,:,0]
+#    rc3 = sdh0[:,:,:,2]
+    
+#    r3loss = tf.reduce_sum(tf.square(rc3 - rc1), (1,2))
+#    r3loss = tf.reduce_mean(r3loss)
     #return rloss + .01*xloss + omega, rloss, omega
     return rloss + 0.*xloss + omega, rloss, omega
     

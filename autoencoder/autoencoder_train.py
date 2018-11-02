@@ -160,9 +160,14 @@ def train(mmdict, df, params, ndisp, saveto=None):
     print(len(df), len(testdf))
     samp = 26
 
-    test_batch = utils.get_sample(mmdict, testdf, len(testdf),
+    tb0 = utils.get_sample(mmdict, testdf, len(testdf),
                                   width, nchannels,
                                   channels=channels)
+
+    tbmax = tb0.max(axis=(1,2), keepdims=True)
+    tbmin = tb0.min(axis=(1,2), keepdims=True)
+    
+    test_batch = (tb0 - tbmin)/(tbmax - tbmin)
     saver = tf.train.Saver()
 
     with tf.Session() as sess:
@@ -181,6 +186,13 @@ def train(mmdict, df, params, ndisp, saveto=None):
                                              width, nchannels,
                                              channels=channels)
                     
+                    bmax = batch.max(axis=(1,2), keepdims=True)
+                    bmin = batch.min(axis=(1,2), keepdims=True)
+                    
+                    batch = (batch - bmin)/(bmax - bmin)
+#                     rv = .5*(np.random.rand(batchsize) + 1)
+#                     rv = rv[:, np.newaxis, np.newaxis]
+#                     batch[:,:,:,2] *= rv
                     nr = 0 #np.random.randint(0,4)
                     if nr > 0:
                         batch = np.rot90(batch, nr, (1,2)) 
