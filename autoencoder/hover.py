@@ -22,7 +22,7 @@ def getmmfile():
     return mm
 
 def maketooltip():
-    f = open("/media/cjw/PythonLib/cjwdeeplearning/autoencoder/tooltip.html",'r')
+    f = open("/Users/cjw/Projects/cjw/cyto/DeepLearning/autoencoder/tooltip.html",'r')
     t = f.read()
     return t
 
