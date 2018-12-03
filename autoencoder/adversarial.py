@@ -175,12 +175,14 @@ class training():
  
         savedir = '/media/cjw/Data/cyto/Checkpoints/' + tf1 + "_" + title + "/"
         savedir += tf2 + '/'
+        self.logdir = savedir + 'log/'
         self.savename = savedir +  "autoencoder-{:d}x".format(params['latent_size'])
         print("Using data from:", self.datadir)
         print("Saving checkpoints to:", self.savename)
  
         if not os.path.exists(savedir):
             os.makedirs(savedir)
+           
 
     def train(self, gpu=True, display=False, display_int=100,
               report_int=100, dfunc='idisplay',niterations=1000):
@@ -203,6 +205,12 @@ class training():
         self.vn.discriminator_loss(self.sample_z, self.encoder)
         self.ae, self.d, self.g = self.vn.opt()
 
+        tf.summary.scalar('rec_loss', self.vn.rloss)
+        tf.summary.scalar('disc_loss', self.vn.d_loss)
+        tf.summary.scalar('gen_loss', self.vn.gen_loss)
+        tf.summary.histogram('distribution', self.encoder)
+        
+        merged = tf.summary.merge_all()
         self.saver = tf.train.Saver()
 
         if gpu is False:
@@ -213,24 +221,34 @@ class training():
                 device_count = {'GPU': 1})
             
         self.sess = tf.Session(config=config)
+        
+        logwriter = tf.summary.FileWriter(self.logdir, self.sess.graph)
+        
         self.sess.run(tf.global_variables_initializer())
 
         x1 = utils.get_sample(self.mmdict, self.df,
                                        64, w, self.params['nchannels'],
                                        channels=self.params['channels'])
 
-        xn = x1 - x1.mean(axis=(1,2), keepdims=True)
-        xs = xn.std(axis=(1,2), keepdims=True)
-        xns = xn/xs
+        x1max = x1.max(axis=(1,2), keepdims=True)
+        x1min = x1.min(axis=(1,2), keepdims=True)
+        x1 = (x1 - x1min)/(x1max - x1min)
+#         xn = x1 - x1.mean(axis=(1,2), keepdims=True)
+#         xs = xn.std(axis=(1,2), keepdims=True)
+#         xns = xn/xs
         self.test_images = x1 #xns
-        print(x1.shape, xn.shape, xs.shape, xns.shape)
+        #print(x1.shape, xn.shape, xs.shape, xns.shape)
         ri = 0
         for i in range(niterations):
             
             b1 = self.get_batch(self.params['batchsize'])
-            bn = b1 - b1.mean(axis=(1,2), keepdims=True)
-            bs = bn.std(axis=(1,2), keepdims=True)
-            bns = bn/bs 
+            bmax = b1.max(axis=(1,2), keepdims=True)
+            bmin = b1.min(axis=(1,2), keepdims=True)
+
+            b1 = (b1 - bmin)/(bmax - bmin)
+#             bn = b1 - b1.mean(axis=(1,2), keepdims=True)
+#             bs = bn.std(axis=(1,2), keepdims=True)
+#             bns = bn/bs 
             
             batch_images = b1 #bns #self.get_batch(self.params['batchsize'])
             
@@ -248,7 +266,7 @@ class training():
             self.sess.run(self.ae,
                           feed_dict={self.images:batch_images})
 
-
+            
             if i % self.report_int == 0:
                 xd = self.vn.d_loss.eval({self.images:batch_images,
                                           self.sample_z:batch_z},
@@ -260,7 +278,11 @@ class training():
                                          self.sample_z:batch_z},
                                         session=self.sess)
 
+                summary = self.sess.run(merged,
+                                        feed_dict={self.images:batch_images, self.sample_z:batch_z})
+                logwriter.add_summary(summary, i)               
                 print(i, xd, xg, xr)
+                
                 
             if self.display and i % self.display_int == 0:
                 print("display")

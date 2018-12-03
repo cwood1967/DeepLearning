@@ -59,7 +59,11 @@ def showrow(fig, g, b, s, start):
     counter = 0
     for i in range(g[0].shape[-1]):
         fig.add_subplot(sy,sx,start + counter)
-        plt.imshow(g[:,:,i])
+        gx = g[:,:,i]
+        mxg = gx.max()
+        mng = gx.min()
+        dg = (gx - mxg)/(mxg - mng)
+        plt.imshow(dg)
         counter += 1
     '''
     fig.add_subplot(sy, sx, start + 1)
@@ -98,7 +102,7 @@ to create the dataframe
 '''
 
 
-def train(mmdict, df, params, ndisp, saveto=None):
+def train(mmdict, df, params, ndisp, saveto=None, tloss=.001):
     """Train the autoencoder neural network and save the results
     
     Arguments:
@@ -164,10 +168,12 @@ def train(mmdict, df, params, ndisp, saveto=None):
                                   width, nchannels,
                                   channels=channels)
 
-    tbmax = tb0.max(axis=(1,2), keepdims=True)
-    tbmin = tb0.min(axis=(1,2), keepdims=True)
+    tbmean = tb0.mean(axis=(1,2), keepdims=True)
     
-    test_batch = (tb0 - tbmin)/(tbmax - tbmin)
+#     tbmax = tb0.max(axis=(1,2), keepdims=True)
+#     tbmin = tb0.min(axis=(1,2), keepdims=True)
+    
+    test_batch = tb0 - tbmean #(tb0 - tbmin)/(tbmax - tbmin)
     saver = tf.train.Saver()
 
     with tf.Session() as sess:
@@ -176,65 +182,78 @@ def train(mmdict, df, params, ndisp, saveto=None):
             pass
         else:
             counter = 0
-            for e in range(nepochs):
+            
+            for ib in range(len(df)*nepochs):
                 start = 0
-                ib = 0
-                while start < len(df) // batchsize - 1:
-                    ##### using this: get_sample(mmdict, df, n, size, nchannels, channels=None):
-                    ####batch, wells, rownums = utils.getbatch(mmdict,
-                    batch = utils.get_sample(mmdict, df, batchsize,
-                                             width, nchannels,
-                                             channels=channels)
-                    
-                    bmax = batch.max(axis=(1,2), keepdims=True)
-                    bmin = batch.min(axis=(1,2), keepdims=True)
-                    
-                    batch = (batch - bmin)/(bmax - bmin)
+                
+                #while 1==1: #start < len(df) // batchsize - 1:
+                ##### using this: get_sample(mmdict, df, n, size, nchannels, channels=None):
+                ####batch, wells, rownums = utils.getbatch(mmdict,
+                batch = utils.get_sample(mmdict, df, batchsize,
+                                         width, nchannels,
+                                         channels=channels)
+
+                bmean = batch.mean(axis=(1,2), keepdims=True)
+#                 bmax = batch.max(axis=(1,2), keepdims=True)
+#                 bmin = batch.min(axis=(1,2), keepdims=True)
+
+                batch = batch = batch - bmean #(batch - bmin)/(bmax - bmin)
+                #batch[:,:,:, 1] *= .5
 #                     rv = .5*(np.random.rand(batchsize) + 1)
 #                     rv = rv[:, np.newaxis, np.newaxis]
 #                     batch[:,:,:,2] *= rv
-                    nr = 0 #np.random.randint(0,4)
-                    if nr > 0:
-                        batch = np.rot90(batch, nr, (1,2)) 
-                    # aenc = sess.run(enc,
-                    #                 feed_dict={images:batch})
+                nr = 0 #np.random.randint(0,4)
+                if nr > 0:
+                    batch = np.rot90(batch, nr, (1,2)) 
+                # aenc = sess.run(enc,
+                #                 feed_dict={images:batch})
 
-                    asdd, aenc, az, aient, agent, _ = sess.run([sdd, enc, loss, ient, gent, opt],
-                                                 feed_dict={images: batch})
+                asdd, aenc, az, aient, agent, _ = sess.run([sdd, enc, loss, ient, gent, opt],
+                                             feed_dict={images: batch})
 
-                    ni = np.random.randint(0, batchsize)
+                ni = np.random.randint(0, batchsize)
 
-                    if ib % ndisp == 0:
-                        sdh0r = asdd[ni]
-                        test_he = sess.run(enc, feed_dict={images: test_batch})
-                        test_sdd = sess.run(sdd, feed_dict={enc: test_he,
-                                                            images: test_batch})
+                if ib % (ndisp/10) == 0:
+                    test_he = sess.run(enc, feed_dict={images: test_batch})
+                    test_sdd, test_loss = sess.run([sdd, loss], feed_dict={enc: test_he,
+                                                        images: test_batch})
 
-                        print('Epoch: ', e, 'Iteration: ', ib, 'Loss: ', az, aient, agent)
-                        '''
-                        display(sess, sdh0r[:, :, 0], batch[ni, :, :, 0],
-                                test_sdd[ni, :, :, 0], test_batch[ni, :, :, 0],
-                                test_sdd[4, :, :, 0], test_batch[4, :, :, 0],
-                                test_he[ni], aenc[ni],
-                                test_he[4], test_he[0])
-                        '''
-                        
-                        gd = [sdh0r[:, :, :], test_sdd[ni, :, :, :], test_sdd[4, :, :, :]]
-                        bd = [batch[ni, :, :, :], test_batch[ni, :, :, :], test_batch[4, :, :, :]]
-                        pd = [aenc[ni],  test_he[ni], test_he[4]]
-                        display2(sess, gd, bd, pd)
-                        '''
-                        display2(sess, sdh0r[:, :, :], batch[ni, :, :, :],
-                                test_sdd[ni, :, :, :], test_batch[ni, :, :, :],
-                                test_sdd[4, :, :, :], test_batch[4, :, :, :])
-                        '''
-                        
-                    ib += 1
-                    counter += 1
-                    start += 1
-                    if ib > 2000000:
+
+                    print('Iteration: ', ib, 'Loss: ', az, aient, agent)
+                    print("Test Loss", test_loss)
+                    if test_loss < tloss:
                         break
-                saver.save(sess, savename, global_step=counter)
+                        
+                if ib % ndisp == 0:
+                    sdh0r = asdd[ni]
+#                     test_he = sess.run(enc, feed_dict={images: test_batch})
+#                     test_sdd, test_loss = sess.run([sdd, loss], feed_dict={enc: test_he,
+#                                                         images: test_batch})
+
+                    print('Iteration: ', ib, 'Loss: ', az, aient, agent)
+                    print("Test Loss", test_loss)
+                    '''
+                    display(sess, sdh0r[:, :, 0], batch[ni, :, :, 0],
+                            test_sdd[ni, :, :, 0], test_batch[ni, :, :, 0],
+                            test_sdd[4, :, :, 0], test_batch[4, :, :, 0],
+                            test_he[ni], aenc[ni],
+                            test_he[4], test_he[0])
+                    '''
+
+                    gd = [sdh0r[:, :, :], test_sdd[ni, :, :, :], test_sdd[4, :, :, :]]
+                    bd = [batch[ni, :, :, :], test_batch[ni, :, :, :], test_batch[4, :, :, :]]
+                    pd = [aenc[ni],  test_he[ni], test_he[4]]
+                    display2(sess, gd, bd, pd)
+                    
+                    saver.save(sess, savename, global_step=ib)
+                    '''
+                    display2(sess, sdh0r[:, :, :], batch[ni, :, :, :],
+                            test_sdd[ni, :, :, :], test_batch[ni, :, :, :],
+                            test_sdd[4, :, :, :], test_batch[4, :, :, :])
+                    '''
+                
+            saver.save(sess, savename, global_step=ib)
+            
     print("Done")
 
 if __name__ == '__main__':
