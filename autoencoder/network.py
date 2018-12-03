@@ -258,8 +258,8 @@ def decoder(z, nchannels=2, width=64, droprate=.7, is_train=True,
         #rmax = tf.reduce_max(dh0)
         #rmin = tf.reduce_min(dh0)
         
-        sdh0 = tf.nn.sigmoid(dh0)  # , name='decoder_image')
-        #sdh0 = tf.nn.tanh(dh0)
+        #sdh0 = tf.nn.sigmoid(dh0)  # , name='decoder_image')
+        sdh0 = tf.nn.tanh(dh0)
         #sdh0 = dh0
         #dh0 = tf.minimum(dh0, 1)
         #print("dh0", dh0.shape)
@@ -412,10 +412,10 @@ def ae_loss(images, sdh0):
     return loss, xloss, diff
 
 def sparse_loss(images, sdh0, h, slam):
-    xloss = -tf.reduce_mean(images * tf.log(sdh0 + 1e-6) +
-                           (1 - images) * tf.log(1 - sdh0 + 1e-6), (1, 2, 3))
+#     xloss = -tf.reduce_mean(images * tf.log(sdh0 + 1e-6) +
+#                            (1 - images) * tf.log(1 - sdh0 + 1e-6), (1, 2, 3))
     
-    xloss = tf.reduce_mean(xloss)
+#     xloss = tf.reduce_mean(xloss)
     rloss = tf.reduce_sum(tf.square(images - sdh0), (1, 2, 3))
     rloss = tf.reduce_mean(rloss)
     omega = slam*tf.reduce_sum(tf.abs(h))
@@ -426,7 +426,7 @@ def sparse_loss(images, sdh0, h, slam):
 #    r3loss = tf.reduce_sum(tf.square(rc3 - rc1), (1,2))
 #    r3loss = tf.reduce_mean(r3loss)
     #return rloss + .01*xloss + omega, rloss, omega
-    return rloss + 0.*xloss + omega, rloss, omega
+    return rloss + omega, rloss, omega
     
 def model_opt(loss, learning_rate):
     opt = tf.train.AdamOptimizer(learning_rate=learning_rate, beta1=.5).minimize(loss)
