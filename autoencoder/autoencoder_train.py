@@ -143,13 +143,13 @@ def train(mmdict, df, params, ndisp, saveto=None, tloss=.001):
 
     enc = network.encoder(images, latent_size, droprate=droprate, is_train=True,
                           nfilters=enc_sizes, stdev=stdev, denoise = denoise)
-    sdd = network.decoder(enc, nchannels=nchannels, width=width,
+    sdd, dd = network.decoder(enc, nchannels=nchannels, width=width,
                           droprate=droprate,
                           is_train=True, nfilters=dec_sizes, stdev=stdev)
 
     #loss, ient, gent = network.ae_loss(images, sdd, enc)
-    loss, ient, gent = network.sparse_loss(images, sdd, enc, slam)
-    
+    #loss, ient, gent = network.sparse_loss(images, sdd, enc, slam)
+    loss = network.ce_loss(images, dd) 
     opt = network.model_opt(loss, learning_rate)
     print(len(df), len(df)//batchsize, batchsize)
     
@@ -168,12 +168,13 @@ def train(mmdict, df, params, ndisp, saveto=None, tloss=.001):
                                   width, nchannels,
                                   channels=channels)
 
-    tbmean = tb0.mean(axis=(1,2), keepdims=True)
-    
+#    tbmean = tb0.mean(axis=(1,2), keepdims=True)
+#    tbstd = tb0.std(axis=(1,2), keepdims=True)
 #     tbmax = tb0.max(axis=(1,2), keepdims=True)
 #     tbmin = tb0.min(axis=(1,2), keepdims=True)
     
-    test_batch = tb0 - tbmean #(tb0 - tbmin)/(tbmax - tbmin)
+#    test_batch = (tb0 - tbmean)/tbstd #(tb0 - tbmin)/(tbmax - tbmin)
+    test_batch = tb0
     saver = tf.train.Saver()
 
     with tf.Session() as sess:
@@ -183,7 +184,7 @@ def train(mmdict, df, params, ndisp, saveto=None, tloss=.001):
         else:
             counter = 0
             
-            for ib in range(len(df)*nepochs):
+            for ib in range(batchsize*nepochs):
                 start = 0
                 
                 #while 1==1: #start < len(df) // batchsize - 1:
@@ -193,11 +194,12 @@ def train(mmdict, df, params, ndisp, saveto=None, tloss=.001):
                                          width, nchannels,
                                          channels=channels)
 
-                bmean = batch.mean(axis=(1,2), keepdims=True)
+#                 bmean = batch.mean(axis=(1,2), keepdims=True)
 #                 bmax = batch.max(axis=(1,2), keepdims=True)
 #                 bmin = batch.min(axis=(1,2), keepdims=True)
 
-                batch = batch = batch - bmean #(batch - bmin)/(bmax - bmin)
+#                 bstd = batch.std(axis=(1,2), keepdims=True)
+#                 batch = (batch - bmean)/bstd #(batch - bmin)/(bmax - bmin)
                 #batch[:,:,:, 1] *= .5
 #                     rv = .5*(np.random.rand(batchsize) + 1)
 #                     rv = rv[:, np.newaxis, np.newaxis]
@@ -208,7 +210,7 @@ def train(mmdict, df, params, ndisp, saveto=None, tloss=.001):
                 # aenc = sess.run(enc,
                 #                 feed_dict={images:batch})
 
-                asdd, aenc, az, aient, agent, _ = sess.run([sdd, enc, loss, ient, gent, opt],
+                asdd, aenc, az, add,  _ = sess.run([sdd, enc, loss, dd, opt],
                                              feed_dict={images: batch})
 
                 ni = np.random.randint(0, batchsize)
@@ -219,7 +221,7 @@ def train(mmdict, df, params, ndisp, saveto=None, tloss=.001):
                                                         images: test_batch})
 
 
-                    print('Iteration: ', ib, 'Loss: ', az, aient, agent)
+                    print('Iteration: ', ib, 'Loss: ', az)
                     print("Test Loss", test_loss)
                     if test_loss < tloss:
                         break
@@ -230,7 +232,7 @@ def train(mmdict, df, params, ndisp, saveto=None, tloss=.001):
 #                     test_sdd, test_loss = sess.run([sdd, loss], feed_dict={enc: test_he,
 #                                                         images: test_batch})
 
-                    print('Iteration: ', ib, 'Loss: ', az, aient, agent)
+                    print('Iteration: ', ib, 'Loss: ', az)
                     print("Test Loss", test_loss)
                     '''
                     display(sess, sdh0r[:, :, 0], batch[ni, :, :, 0],

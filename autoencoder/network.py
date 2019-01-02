@@ -258,15 +258,17 @@ def decoder(z, nchannels=2, width=64, droprate=.7, is_train=True,
         #rmax = tf.reduce_max(dh0)
         #rmin = tf.reduce_min(dh0)
         
-        #sdh0 = tf.nn.sigmoid(dh0)  # , name='decoder_image')
-        sdh0 = tf.nn.tanh(dh0)
+        sdh0 = tf.nn.sigmoid(dh0)  # , name='decoder_image')
+        sdh0 = tf.identity(sdh0, name="decoder_sigmoid")
+        dh0 =  tf.identity(dh0, name="decoder_last")
+        #sdh0 = tf.nn.tanh(dh0)
         #sdh0 = dh0
         #dh0 = tf.minimum(dh0, 1)
         #print("dh0", dh0.shape)
         #sdh0 = tf.nn.relu(dh0)
         #sdh0 = (dh0 - rmin)/(rmax - rmin) 
         print(sdh0)
-    return sdh0
+    return sdh0, dh0
 
 def mixture(enc_stack, nclusters):
     split = tf.split(enc_stack, nclusters)
@@ -383,6 +385,12 @@ def mix_loss(images, sdd_stack, mixp, a, b):
     loss = loss2
     return loss, rploss, p_entropy, tf.reduce_mean(rerr), tf.reduce_mean(pbar_entropy)
 
+
+def ce_loss(images, dh0):
+    ''' calculate the cross entropy loss'''
+    ce = tf.nn.sigmoid_cross_entropy_with_logits(labels = images, logits=dh0)
+    ce = tf.reduce_mean(tf.reduce_sum(ce, axis=(1,2,3)))
+    return ce
 
 def ae_loss(images, sdh0):
     """
