@@ -17,7 +17,7 @@ class Classifier:
         self.images, self.labels = self.permute_data_and_labels(_images, _labels)
         self.normalize()
         self.nclasses = self.labels.shape[1]
-        self.set_ttv(.4, .2, .4)
+        self.set_ttv(.8, .1, .1)
         print(self.test_images.shape)
 
     def readmm(self, datafile, w=64, nc=5):
@@ -62,16 +62,17 @@ class Classifier:
 
     def get_batch(self, x, y, n):
         xp, yp = self.permute_data_and_labels(x, y)
+        xp += .2*np.random.randn()
         return xp[:n], yp[:n]
 
     def dnet_block(self, x, nf, k, drate):
-        h = tf.layers.conv2d(x, nf, k, strides=1,
+        h = tf.layers.conv2d(x, nf, k, strides=2,
                              padding='same', dilation_rate=drate,
                              kernel_initializer=None,
                              activation=None)
 
         h = tf.nn.relu(h)
-        h = tf.layers.conv2d(x, nf, k, strides=1,
+        h = tf.layers.conv2d(h, nf, k, strides=1,
                              padding='same', dilation_rate=drate,
                              kernel_initializer=None,
                              activation=None)
@@ -82,27 +83,27 @@ class Classifier:
         ## just make a nice classification thing
         layers = list()
         layers.append(batch)
-        h = self.dnet_block(batch, self.nfilters, 3, 1)
+        h = self.dnet_block(batch, 16, 3, 1)
         layers.append(h)
-        h = tf.concat(layers, -1, name='concat1')
+        #h = tf.concat(layers, -1, name='concat1')
 
-        h = self.dnet_block(h, self.nfilters, 3, 2)
+        h = self.dnet_block(h, 32, 3, 1)
         layers.append(h)
-        h = tf.concat(layers, -1, name='concat2')
+        #h = tf.concat(layers, -1, name='concat2')
 
-        h = self.dnet_block(h, self.nfilters, 3, 4)
+        h = self.dnet_block(h, 64, 3, 1)
         layers.append(h)
-        h = tf.concat(layers, -1, name='concat4')
+        #h = tf.concat(layers, -1, name='concat4')
 
-        h = self.dnet_block(h, self.nfilters, 3, 8)
+        h = self.dnet_block(h, 128, 3, 1)
         layers.append(h)
-        h = tf.concat(layers, -1, name='concat8')
+        #h = tf.concat(layers, -1, name='concat8')
         print(h)
         h = tf.layers.flatten(h)
         h = tf.layers.dense(h, 1000)
         h = tf.nn.relu(h)
 
-        h = tf.layers.dense(h, 200)
+        h = tf.layers.dense(h, 100)
         h = tf.nn.relu(h)
         
         h = tf.layers.dense(h, self.nclasses)        
@@ -112,7 +113,9 @@ class Classifier:
 
     def create_loss(self, labels):
         loss = tf.nn.softmax_cross_entropy_with_logits_v2(logits=self.logits, labels=labels)
-        self.loss = tf.reduce_mean(tf.reduce_sum(loss, axis=(-1)))
+        loss = tf.reduce_sum(loss, axis=(-1))
+        print("loss before reduction", loss)
+        self.loss = tf.reduce_mean(loss)
         print(self.loss)
 
     def create_opt(self):
@@ -135,11 +138,14 @@ class Classifier:
         sess = tf.Session()
         sess.run(tf.global_variables_initializer())
 
-        for i in range(200):
-            bx, by = self.get_batch(self.test_images, self.test_labels, 128)
+        for i in range(2000):
+            bx, by = self.get_batch(self.train_images, self.train_labels, 256)
             _, xl = sess.run([self.opt, self.loss],
                              feed_dict={self.image_batch:bx, self.label_batch:by, self.learning_rate:learning_rate})
-            print(xl)
+            if i % 50 == 0:
+                tb, tl = self.get_batch(self.test_images, self.test_labels, 256)
+                vl = sess.run(self.loss,feed_dict={self.image_batch:tb, self.label_batch:tl})
+                print(i, xl, vl)
 
 if sys.platform == 'darwin':
     datapre = '/Users/cjw/'
@@ -149,4 +155,4 @@ else:
 datafile = datapre + 'Data/cyto/Classifier/images.mm'
 labelsfile = datapre + 'Data/cyto/Classifier/labels.mm'
 c = Classifier(datafile, labelsfile, 32, 5)
-c.train(learning_rate=0.01)
+c.train(learning_rate=0.001)
