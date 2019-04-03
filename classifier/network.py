@@ -13,8 +13,25 @@ class Classifier:
         self.nfilters = 8
         _images = self.readmm(datafile)
         _labels = self.read_labels_mm(labelsfile, _images)
+
     
         self.images, self.labels = self.permute_data_and_labels(_images, _labels)
+        self.label_nums = np.argmax(self.labels, axis=1)
+        c8 = self.label_nums == 8
+        c3 = self.label_nums == 3
+        ic8 = self.images[c8]
+        ic3 = self.images[c3]
+
+        lc8 = np.zeros((ic8.shape[0], 2), dtype=np.float32)
+        lc3 = np.zeros((ic3.shape[0], 2), dtype=np.float32)
+        lc8[:] = [0, 1]
+        lc3[:] = [1, 0]
+
+        x_images = np.concatenate([ic8, ic3], axis=0)
+        x_labels = np.concatenate([lc8, lc3], axis=0)        
+        self.images, self.labels = self.permute_data_and_labels(x_images, x_labels)
+        #print(self.label_nums)
+        
         self.normalize()
         self.nclasses = self.labels.shape[1]
         self.set_ttv(.8, .1, .1)
@@ -23,7 +40,7 @@ class Classifier:
     def readmm(self, datafile, w=64, nc=5):
         mm = np.memmap(datafile, dtype=np.float32)
         mm = mm.reshape((-1, w, w, nc))
-        x = mm[:,16:48, 16:48, :]
+        x = mm[:,16:48, 16:48, [0, 2,4]]
         del mm
         return x 
 
@@ -33,6 +50,7 @@ class Classifier:
         mm = mm.reshape((ns, -1))
         x = mm[:]
         del mm
+
         return x
 
     def normalize(self, type=0):
@@ -72,10 +90,13 @@ class Classifier:
                              activation=None)
 
         h = tf.nn.relu(h)
+        h = tf.layers.dropout(h, rate=.5)
         h = tf.layers.conv2d(h, nf, k, strides=1,
                              padding='same', dilation_rate=drate,
                              kernel_initializer=None,
                              activation=None)
+        
+        h = tf.layers.dropout(h, rate=.5)        
         h = tf.nn.relu(h)
         return h
 
@@ -83,24 +104,25 @@ class Classifier:
         ## just make a nice classification thing
         layers = list()
         layers.append(batch)
-        h = self.dnet_block(batch, 16, 3, 1)
+        ns = 8
+        h = self.dnet_block(batch, 4, 3, 1)
         layers.append(h)
         #h = tf.concat(layers, -1, name='concat1')
 
-        h = self.dnet_block(h, 32, 3, 1)
+        h = self.dnet_block(h, 4, 3, 1)
         layers.append(h)
         #h = tf.concat(layers, -1, name='concat2')
 
-        h = self.dnet_block(h, 64, 3, 1)
+        h = self.dnet_block(h, 8, 3, 1)
         layers.append(h)
         #h = tf.concat(layers, -1, name='concat4')
 
-        h = self.dnet_block(h, 128, 3, 1)
+        h = self.dnet_block(h, 16, 3, 1)
         layers.append(h)
         #h = tf.concat(layers, -1, name='concat8')
         print(h)
         h = tf.layers.flatten(h)
-        h = tf.layers.dense(h, 1000)
+        h = tf.layers.dense(h, 500)
         h = tf.nn.relu(h)
 
         h = tf.layers.dense(h, 100)
@@ -123,28 +145,51 @@ class Classifier:
                                      name='adam_opt').minimize(self.loss)
 
     def create_placeholders(self):
-        self.image_batch = tf.placeholder(tf.float32, shape=(None, self.w, self.w, self.nc))
+        self.image_batch = tf.placeholder(tf.float32, shape=(None, self.w, self.w, 3))
         self.label_batch = tf.placeholder(tf.float32, shape=(None, self.nclasses))
         self.learning_rate = tf.placeholder(tf.float32, shape=())
 
+    def create_accuracy(self, y, y_):
+        cpred = tf.equal(tf.argmax(y, 1), tf.argmax(y_, 1))
+        self.accuracy = tf.reduce_mean(tf.cast(cpred, tf.float32))
+        
+                                                    
     def train(self, learning_rate=0.001):
         tf.reset_default_graph()
         self.create_placeholders()
         self.create_network(c.image_batch)
         self.create_loss(self.label_batch)
+        self.create_accuracy(self.softmax, self.label_batch)
         self.create_opt()
         print("***********************")
-        print(self.opt)
+
+
         sess = tf.Session()
         sess.run(tf.global_variables_initializer())
-
-        for i in range(2000):
+        tf.summary.scalar('loss', self.loss)
+        tf.summary.scalar('accuracy', self.accuracy)
+        tf.summary.histogram('logits', self.softmax)
+        tf.summary.histogram('clusters', tf.argmax(self.softmax, 1))
+        tf.summary.histogram('truth', tf.argmax(self.label_batch, 1))
+        print(tf.reduce_mean(self.softmax, axis=-1))
+        print(tf.reduce_mean(self.softmax, axis=0))        
+        #tf.summary.scalar('test_loss', self.loss)
+        merged = tf.summary.merge_all()
+        train_writer = tf.summary.FileWriter('logs/train', sess.graph)
+        test_writer = tf.summary.FileWriter('logs/test')
+        m_writer = tf.summary.FileWriter('logs/m')
+        
+        for i in range(20000):
             bx, by = self.get_batch(self.train_images, self.train_labels, 256)
-            _, xl = sess.run([self.opt, self.loss],
+            _, xl, xmg = sess.run([self.opt, self.loss, merged],
                              feed_dict={self.image_batch:bx, self.label_batch:by, self.learning_rate:learning_rate})
+            train_writer.add_summary(xmg, i)
             if i % 50 == 0:
                 tb, tl = self.get_batch(self.test_images, self.test_labels, 256)
                 vl = sess.run(self.loss,feed_dict={self.image_batch:tb, self.label_batch:tl})
+                #summary = sess.run(merged, feed_dict={self.image_batch:bx, self.label_batch:by})
+                test_summary = sess.run(merged, feed_dict={self.image_batch:tb, self.label_batch:tl})
+                test_writer.add_summary(test_summary, i)                
                 print(i, xl, vl)
 
 if sys.platform == 'darwin':
@@ -155,4 +200,4 @@ else:
 datafile = datapre + 'Data/cyto/Classifier/images.mm'
 labelsfile = datapre + 'Data/cyto/Classifier/labels.mm'
 c = Classifier(datafile, labelsfile, 32, 5)
-c.train(learning_rate=0.001)
+c.train(learning_rate=0.002)
