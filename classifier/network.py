@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 
+## this might be funky ##
 class Classifier:
     def __init__(self, datafile, labelsfile, w, nc):
 
@@ -16,20 +17,20 @@ class Classifier:
 
     
         self.images, self.labels = self.permute_data_and_labels(_images, _labels)
-        self.label_nums = np.argmax(self.labels, axis=1)
-        c8 = self.label_nums == 8
-        c3 = self.label_nums == 3
-        ic8 = self.images[c8]
-        ic3 = self.images[c3]
-
-        lc8 = np.zeros((ic8.shape[0], 2), dtype=np.float32)
-        lc3 = np.zeros((ic3.shape[0], 2), dtype=np.float32)
-        lc8[:] = [0, 1]
-        lc3[:] = [1, 0]
-
-        x_images = np.concatenate([ic8, ic3], axis=0)
-        x_labels = np.concatenate([lc8, lc3], axis=0)        
-        self.images, self.labels = self.permute_data_and_labels(x_images, x_labels)
+#        self.label_nums = np.argmax(self.labels, axis=1)
+#        c8 = self.label_nums == 8
+#        c3 = self.label_nums == 3
+#        ic8 = self.images[c8]
+#        ic3 = self.images[c3]
+#
+#        lc8 = np.zeros((ic8.shape[0], 2), dtype=np.float32)
+#        lc3 = np.zeros((ic3.shape[0], 2), dtype=np.float32)
+#        lc8[:] = [0, 1]
+#        lc3[:] = [1, 0]
+#
+#        x_images = np.concatenate([ic8, ic3], axis=0)
+#        x_labels = np.concatenate([lc8, lc3], axis=0)        
+#        self.images, self.labels = self.permute_data_and_labels(x_images, x_labels)
         #print(self.label_nums)
         
         self.normalize()
@@ -40,7 +41,7 @@ class Classifier:
     def readmm(self, datafile, w=64, nc=5):
         mm = np.memmap(datafile, dtype=np.float32)
         mm = mm.reshape((-1, w, w, nc))
-        x = mm[:,16:48, 16:48, [0, 2,4]]
+        x = mm[:,16:48, 16:48, [0, 1, 3, 4]]
         del mm
         return x 
 
@@ -80,8 +81,9 @@ class Classifier:
 
     def get_batch(self, x, y, n):
         xp, yp = self.permute_data_and_labels(x, y)
-        xp += .2*np.random.randn()
+        xp += .1*np.random.standard_normal(size=xp.shape)
         return xp[:n], yp[:n]
+
 
     def dnet_block(self, x, nf, k, drate):
         h = tf.layers.conv2d(x, nf, k, strides=2,
@@ -145,7 +147,7 @@ class Classifier:
                                      name='adam_opt').minimize(self.loss)
 
     def create_placeholders(self):
-        self.image_batch = tf.placeholder(tf.float32, shape=(None, self.w, self.w, 3))
+        self.image_batch = tf.placeholder(tf.float32, shape=(None, self.w, self.w, 4))
         self.label_batch = tf.placeholder(tf.float32, shape=(None, self.nclasses))
         self.learning_rate = tf.placeholder(tf.float32, shape=())
 
@@ -171,6 +173,7 @@ class Classifier:
         tf.summary.histogram('logits', self.softmax)
         tf.summary.histogram('clusters', tf.argmax(self.softmax, 1))
         tf.summary.histogram('truth', tf.argmax(self.label_batch, 1))
+        tf.summary.image('image', self.image_batch)
         print(tf.reduce_mean(self.softmax, axis=-1))
         print(tf.reduce_mean(self.softmax, axis=0))        
         #tf.summary.scalar('test_loss', self.loss)
