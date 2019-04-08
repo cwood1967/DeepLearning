@@ -175,24 +175,27 @@ class Classifier:
         return xp, yp
 
 
-    def dnet_block(self, x, nf, k, drate):
+    def dnet_block(self, x, nf, k, drate, is_training=True):
         h = tf.layers.conv2d(x, nf, k, strides=1,
                              padding='same', dilation_rate=drate,
                              kernel_initializer=None,
                              activation=None)
 
         h = tf.nn.leaky_relu(h)
-        h = tf.layers.dropout(h, rate=.5)
+        if is_training:
+            h = tf.layers.dropout(h, rate=.5)
+            
         h = tf.layers.conv2d(h, nf, k, strides=2,
                              padding='same', dilation_rate=drate,
                              kernel_initializer=None,
                              activation=None)
-        
-        h = tf.layers.dropout(h, rate=.5)        
+
+        if is_training:
+            h = tf.layers.dropout(h, rate=.5)        
         h = tf.nn.leaky_relu(h)
         return h
 
-    def create_network(self, batch):
+    def create_network(self, batch, is_training=True):
         ## just make a nice classification thing
         layers = list()
         layers.append(batch)
@@ -250,7 +253,7 @@ class Classifier:
     def train(self, learning_rate=0.001):
         tf.reset_default_graph()
         self.create_placeholders()
-        self.create_network(c.image_batch, training=self.is_training)
+        self.create_network(c.image_batch, is_training=self.is_training)
         self.create_loss(self.label_batch)
         self.create_accuracy(self.softmax, self.label_batch)
         self.create_opt()
@@ -275,7 +278,7 @@ class Classifier:
         
         for i in range(20000):
             if i % 100 == 0:
-                learning_rate -= .01*learning_rate
+                learning_rate -= .001*learning_rate
                 print('learning rate set to ', learning_rate)
                 
             bx, by = self.get_balanced_batch(self.train_images,
@@ -296,8 +299,9 @@ class Classifier:
                                                    self.label_batch:tl,
                                                    self.is_training:False})
                 
-                summary = sess.run(merged, feed_dict={self.image_batch:bx, self.label_batch:by
+                summary = sess.run(merged, feed_dict={self.image_batch:bx, self.label_batch:by,
                                                        self.is_training:False})
+                
                 test_summary = sess.run(merged, feed_dict={self.image_batch:tb,
                                                            self.label_batch:tl, self.is_training:False})
                 train_writer.add_summary(summary, i)
