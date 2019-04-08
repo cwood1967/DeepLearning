@@ -175,10 +175,15 @@ class Classifier:
         return xp, yp
 
 
+    def get_regularizer(self, scale=0.1):
+        return tf.contrib.layers.l2_regularizer(scale)
+    
     def dnet_block(self, x, nf, k, drate):
+        
         h = tf.layers.conv2d(x, nf, k, strides=1,
                              padding='same', dilation_rate=drate,
                              kernel_initializer=None,
+                             kernel_regularizer=self.get_regularizer(),
                              activation=None)
 
         h = tf.nn.leaky_relu(h)
@@ -186,6 +191,7 @@ class Classifier:
         h = tf.layers.conv2d(h, nf, k, strides=2,
                              padding='same', dilation_rate=drate,
                              kernel_initializer=None,
+                             kernel_regularizer=self.get_regularizer(),
                              activation=None)
         
         h = tf.layers.dropout(h, rate=.5)        
@@ -217,10 +223,13 @@ class Classifier:
         #h = tf.layers.dense(h, 100)
         #h = tf.nn.relu(h)
 
-        h = tf.layers.dense(h, 20)
+        h = tf.layers.dense(h, 20,
+                            kernel_regularizer=self.get_regularizer())
+        
         h = tf.nn.leaky_relu(h)
         
-        h = tf.layers.dense(h, self.nclasses)        
+        h = tf.layers.dense(h, self.nclasses ,
+                             kernel_regularizer=self.get_regularizer())        
         
         self.logits = h
         self.softmax = tf.nn.softmax(h)
@@ -228,8 +237,9 @@ class Classifier:
     def create_loss(self, labels):
         loss = tf.nn.softmax_cross_entropy_with_logits_v2(logits=self.logits, labels=labels)
         loss = tf.reduce_sum(loss, axis=(-1))
+        l2_loss = tf.losses.get_regularization_loss()
         print("loss before reduction", loss)
-        self.loss = tf.reduce_mean(loss)
+        self.loss = tf.reduce_mean(loss) + l2_loss
         print(self.loss)
 
     def create_opt(self):
