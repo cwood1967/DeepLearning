@@ -20,7 +20,7 @@ class Classifier:
 
         cilist = list()
         cllist = list()
-        cnums = [1, 2, 3, 8]
+        cnums = [3, 7]
         print("reducing classes")
         for i, c in enumerate(cnums):
             print(i, c)
@@ -56,7 +56,7 @@ class Classifier:
     def readmm(self, datafile, w=64, nc=5):
         mm = np.memmap(datafile, dtype=np.float32)
         mm = mm.reshape((-1, w, w, nc))
-        x = mm[:,16:48, 16:48, [0, 1, 3, 4]]
+        x = mm[:,16:48, 16:48, [1, 2, 3]]
         del mm
         return x 
 
@@ -163,7 +163,7 @@ class Classifier:
         kx = np.arange(bx.shape[0])
         np.random.shuffle(kx)
         bx = bx[kx]
-        bx += .3*np.random.rand()
+        bx += .2*np.random.rand()
         by = by[kx]
         return bx, by
                                   
@@ -176,10 +176,10 @@ class Classifier:
 
 
 
-    def get_regularizer(self, scale=0.1):
+    def get_regularizer(self, scale=1.):
         return tf.contrib.layers.l2_regularizer(scale)
     
-    def dnet_block(self, x, nf, k, drate):
+    def dnet_block(self, x, nf, k, drate, is_training=True):
         
         h = tf.layers.conv2d(x, nf, k, strides=1,
                              padding='same', dilation_rate=drate,
@@ -189,7 +189,7 @@ class Classifier:
 
         h = tf.nn.leaky_relu(h)
         if is_training:
-            h = tf.layers.dropout(h, rate=.5)
+            h = tf.layers.dropout(h, rate=1)
             
         h = tf.layers.conv2d(h, nf, k, strides=2,
                              padding='same', dilation_rate=drate,
@@ -198,7 +198,7 @@ class Classifier:
                              activation=None)
 
         if is_training:
-            h = tf.layers.dropout(h, rate=.5)        
+            h = tf.layers.dropout(h, rate=1)        
         h = tf.nn.leaky_relu(h)
         return h
 
@@ -207,27 +207,27 @@ class Classifier:
         layers = list()
         layers.append(batch)
         ns = 8
-        h = self.dnet_block(batch, 8, 3, 1)
+        h = self.dnet_block(batch, 16, 3, 1)
         layers.append(h)
         #h = tf.concat(layers, -1, name='concat1')
 
-        h = self.dnet_block(h, 16, 3, 1)
+        h = self.dnet_block(h, 32, 3, 1)
         layers.append(h)
         #h = tf.concat(layers, -1, name='concat2')
 
-        #h = self.dnet_block(h, 8, 3, 1)
-        #layers.append(h)
+        h = self.dnet_block(h, 64, 3, 1)
+        layers.append(h)
         #h = tf.concat(layers, -1, name='concat4')
 
-        #h = self.dnet_block(h, 16, 3, 1)
-        #layers.append(h)
+        h = self.dnet_block(h, 128, 3, 1)
+        layers.append(h)
         #h = tf.concat(layers, -1, name='concat8')
         print(h)
         h = tf.layers.flatten(h)
-        #h = tf.layers.dense(h, 100)
-        #h = tf.nn.relu(h)
+        h = tf.layers.dense(h, 500)
+        h = tf.nn.leaky_relu(h)
 
-        h = tf.layers.dense(h, 20,
+        h = tf.layers.dense(h, 100,
                             kernel_regularizer=self.get_regularizer())
         
         h = tf.nn.leaky_relu(h)
@@ -244,6 +244,7 @@ class Classifier:
         l2_loss = tf.losses.get_regularization_loss()
         print("loss before reduction", loss)
         self.loss = tf.reduce_mean(loss) + l2_loss
+        self.l2_loss = l2_loss
         print(self.loss)
 
     def create_opt(self):
@@ -251,7 +252,7 @@ class Classifier:
                                      name='adam_opt').minimize(self.loss)
 
     def create_placeholders(self):
-        self.image_batch = tf.placeholder(tf.float32, shape=(None, self.w, self.w, 4))
+        self.image_batch = tf.placeholder(tf.float32, shape=(None, self.w, self.w, 3))
         self.label_batch = tf.placeholder(tf.float32, shape=(None, self.nclasses))
         self.learning_rate = tf.placeholder(tf.float32, shape=())
         self.is_training = tf.placeholder(tf.bool, shape=())
@@ -275,6 +276,7 @@ class Classifier:
         sess.run(tf.global_variables_initializer())
         tf.summary.scalar('loss', self.loss)
         tf.summary.scalar('accuracy', self.accuracy)
+        tf.summary.scalar('l2 loss', self.l2_loss)
         tf.summary.histogram('logits', self.softmax)
         tf.summary.histogram('clusters', tf.argmax(self.softmax, 1))
         tf.summary.histogram('truth', tf.argmax(self.label_batch, 1))
@@ -287,9 +289,9 @@ class Classifier:
         test_writer = tf.summary.FileWriter('logs/test')
         m_writer = tf.summary.FileWriter('logs/m')
         
-        for i in range(20000):
+        for i in range(200000):
             if i % 100 == 0:
-                learning_rate -= .001*learning_rate
+                learning_rate -= .0002*learning_rate
                 print('learning rate set to ', learning_rate)
                 
             bx, by = self.get_balanced_batch(self.train_images,
@@ -301,7 +303,7 @@ class Classifier:
                                         self.learning_rate:learning_rate,
                                         self.is_training:True})
 
-            if i % 50 == 0:
+            if i % 200 == 0:
                 tb, tl = self.get_balanced_batch(self.test_images,
                                                  self.test_labels,
                                                  self.class_where_test,
@@ -327,4 +329,4 @@ else:
 datafile = datapre + 'Data/cyto/Classifier/images.mm'
 labelsfile = datapre + 'Data/cyto/Classifier/labels.mm'
 c = Classifier(datafile, labelsfile, 32, 5)
-c.train(learning_rate=0.0005)
+c.train(learning_rate=0.0008)
