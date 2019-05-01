@@ -26,7 +26,7 @@ class Classifier:
         #cnums = [0, 1, 6,  7]
         print("reducing classes")
         for i, c in enumerate(cnums):
-            print(i, c)
+            #print(i, c)
             cl = self.label_nums == c
             ci = self.images[cl]
             lc = np.zeros((ci.shape[0], len(cnums)), dtype=np.float32)
@@ -35,7 +35,7 @@ class Classifier:
             lc[:] = ohv
             cilist.append(ci)
             cllist.append(lc)
-            print(lc)
+            #print(lc)
 
         x_images = np.concatenate(cilist, axis=0)
         x_labels = np.concatenate(cllist, axis=0)        
@@ -46,7 +46,7 @@ class Classifier:
         self.nclasses = self.labels.shape[1]
         self.nclusters = self.label_nums.max() + 1
         self.set_ttv(.8, .1, .1)
-        print(self.test_images.shape)
+        #print(self.test_images.shape)
 
     def readmm(self, datafile, w=64, nc=5):
         mm = np.memmap(datafile, dtype=np.float32)
@@ -231,7 +231,7 @@ class Classifier:
         #h = self.dnet_block(h, 128, 3, 1)
         #layers.append(h)
         #h = tf.concat(layers, -1, name='concat8')
-        print(h)
+        #print(h)
         h = tf.layers.flatten(h)
         h = tf.layers.dense(h, 500)
         h = tf.nn.leaky_relu(h)
@@ -254,7 +254,7 @@ class Classifier:
         #print("loss before reduction", loss)
         self.loss = tf.reduce_mean(loss) + 4*l2_loss
         self.l2_loss = l2_loss
-        print(self.loss)
+        #print(self.loss)
 
     def create_opt(self):
         self.opt = tf.train.AdamOptimizer(learning_rate=self.learning_rate,
@@ -271,14 +271,16 @@ class Classifier:
         self.accuracy = tf.reduce_mean(tf.cast(cpred, tf.float32))
         p = tf.argmax(y, 1)
         p_ = tf.argmax(y_, 1)
-        
-        self.accuracy_score = tf.metrics.accuracy(p, p_)
-        
+        #print("##########", p, p_)
+        _, self.accuracy_score = tf.metrics.accuracy(p, p_)
+        _, self.precision = tf.metrics.precision(p, p_)
+        _, self.recall = tf.metrics.recall(p, p_)        
+        self.confmat = tf.math.confusion_matrix(p_, p)
                                                     
-    def train(self, learning_rate=0.001):
+    def train(self, n_iter=10000, learning_rate=0.001):
         tf.reset_default_graph()
         self.create_placeholders()
-        self.create_network(c.image_batch, is_training=self.is_training)
+        self.create_network(self.image_batch, is_training=self.is_training)
         self.create_loss(self.label_batch)
         self.create_accuracy(self.softmax, self.label_batch)
         self.create_opt()
@@ -286,26 +288,29 @@ class Classifier:
 
 
         sess = tf.Session()
+        self.sess = sess
         xinit = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
         sess.run(xinit)
         #sess.run(tf.global_variables_initializer())
         tf.summary.scalar('loss', self.loss)
-        tf.summary.scalar('accuracy', self.accuracy)
-        tf.summary.scalar('accuracy_score', self.accuracy_score[0]) 
-        tf.summary.scalar('l2 loss', self.l2_loss)
+#        tf.summary.scalar('accuracy', self.accuracy)
+        tf.summary.scalar('accuracy_score', self.accuracy_score)
+        tf.summary.scalar('precision', self.precision)
+        tf.summary.scalar('recall', self.recall)                 
+ #       tf.summary.scalar('zl2 loss', self.l2_loss)
         tf.summary.histogram('logits', self.softmax)
         tf.summary.histogram('clusters', tf.argmax(self.softmax, 1))
         tf.summary.histogram('truth', tf.argmax(self.label_batch, 1))
         tf.summary.image('image', self.image_batch)
-        print(tf.reduce_mean(self.softmax, axis=-1))
-        print(tf.reduce_mean(self.softmax, axis=0))        
-        tf.summary.scalar('test_loss', self.loss)
+        #print(tf.reduce_mean(self.softmax, axis=-1))
+        #print(tf.reduce_mean(self.softmax, axis=0))        
+
         merged = tf.summary.merge_all()
         train_writer = tf.summary.FileWriter('logs/train', sess.graph)
         test_writer = tf.summary.FileWriter('logs/test')
         m_writer = tf.summary.FileWriter('logs/m')
         
-        for i in range(200000):
+        for i in range(n_iter):
             if i % 100 == 0:
                 learning_rate -= .0002*learning_rate
                 #print('learning rate set to ', learning_rate)
@@ -318,43 +323,68 @@ class Classifier:
                              feed_dict={self.image_batch:bx, self.label_batch:by,
                                         self.learning_rate:learning_rate,
                                         self.is_training:True})
-
-            if i % 200 == 0:
+            
+            
+            if i % 2000 == 0:
                 tb, tl = self.get_balanced_batch(self.test_images,
                                                  self.test_labels,
                                                  self.class_where_test,
                                                  128)
-                vl, vsm, vlb = sess.run([self.loss, self.softmax, self.label_batch],
+                vl, vsm, vlb, vcm = sess.run([self.loss, self.softmax, self.label_batch, self.confmat],
                               feed_dict={self.image_batch:tb,
                                          self.label_batch:tl,
                                          self.is_training:False})
 
-                a1 = np.argmax(vsm, axis=1)
-                a2 = np.argmax(vlb, axis=1)
-                print(np.stack([a1, a2], axis=-1))
+                #a1 = np.argmax(vsm, axis=1)
+                #a2 = np.argmax(vlb, axis=1)
+                #ska = accuracy_score(a1, a2)
+                print(vcm)
                 
                 summary = sess.run(merged, feed_dict={self.image_batch:bx, self.label_batch:by,
                                                        self.is_training:False})
                 
                 test_summary = sess.run(merged, feed_dict={self.image_batch:tb,
                                                            self.label_batch:tl, self.is_training:False})
+            if i % 100 == 0:
                 train_writer.add_summary(summary, i)
                 test_writer.add_summary(test_summary, i)                
             if i % 1000 == 0:
                 print(i, xl, vl)
 
-if sys.platform == 'darwin':
-    datapre = '/Users/cjw/'
-else:
-    datapre = ''
+        ''' run the final test'''
+        tb, tl = self.get_balanced_batch(self.val_images,
+                                         self.val_labels,
+                                         self.class_where_test,
+                                         1024)
 
-parser = argparse.ArgumentParser(description='Train the classifier.')
-parser.add_argument('--cc', type=str)
-args = parser.parse_args()
-cc = np.array(args.cc.split(','), dtype=np.int32)
-print("Train on these", cc)
+        vl, vsm, vlb, vcm = sess.run([self.loss, self.softmax, self.label_batch, self.confmat],
+                              feed_dict={self.image_batch:tb,
+                                         self.label_batch:tl,
+                                         self.is_training:False})
 
-datafile = datapre + 'Data/cc_images.mm'
-labelsfile = datapre + 'Data/cc_labels.mm'
-c = Classifier(datafile, labelsfile, 32, 5, cc)
-c.train(learning_rate=0.0008)
+        print(vcm)
+'''###### end of Classifier #######'''
+
+def test_err(x):
+    print(x)
+    
+def get_classifier(datafile, labelsfile, w, nc, cc):
+    c = Classifier(datafile, labelsfile, w, nc, cc)
+    return c
+
+if __name__ == '__main__':
+    if sys.platform == 'darwin':
+        datapre = '/Users/cjw/'
+    else:
+        datapre = ''
+
+    parser = argparse.ArgumentParser(description='Train the classifier.')
+    parser.add_argument('--cc', type=str)
+    args = parser.parse_args()
+    cc = np.array(args.cc.split(','), dtype=np.int32)
+    print("Train on these", cc)
+
+    datafile = datapre + 'Data/cc_images.mm'
+    labelsfile = datapre + 'Data/cc_labels.mm'
+    c = Classifier(datafile, labelsfile, 32, 5, cc)
+    c.train(n_iter=10000, learning_rate=0.0008)
