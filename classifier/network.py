@@ -10,12 +10,20 @@ from sklearn.metrics import accuracy_score
 
 ## this might be funky ##
 class Classifier:
-    def __init__(self, datafile, labelsfile, w, nc, cnums):
+    def __init__(self, datafile, labelsfile, w, nc, cnums,
+                 offset=0, ow = 64, channels=[1,2,3],
+                dtype=np.float32, label_offset=0):
 
+        self.ow = ow
         self.w = w
         self.nc = nc
         self.nfilters = 8
-        _images = self.readmm(datafile)
+        
+        self.offset = offset
+        self.channels = channels
+        self.label_dtype = dtype
+        self.label_offset = label_offset
+        _images = self.readmm(datafile, w=ow)
         _labels = self.read_labels_mm(labelsfile, _images)
         self.images, self.labels = self.permute_data_and_labels(_images, _labels)
 
@@ -49,14 +57,20 @@ class Classifier:
         #print(self.test_images.shape)
 
     def readmm(self, datafile, w=64, nc=5):
-        mm = np.memmap(datafile, dtype=np.float32)
-        mm = mm.reshape((-1, w, w, nc))
-        x = mm[:,16:48, 16:48, [1, 2, 3]]
+        mm = np.memmap(datafile, dtype=np.float32, offset=self.offset)
+        mm = mm.reshape((-1, self.ow, self.ow, self.nc))
+        crop0 = (self.ow - self.w)//2
+        crop1 = (crop0 + self.w)
+        if self.channels == -1:
+            x = mm[:,crop0:crop1, crop0:crop1, :]
+            x# = np.expand_dims(x, -1)
+        else:
+            x = mm[:,crop0:crop1, crop0:crop1, self.channels]
         del mm
         return x 
 
     def read_labels_mm(self, labelsfile, images):
-        mm = np.memmap(labelsfile, dtype=np.float32)
+        mm = np.memmap(labelsfile, dtype=self.label_dtype, offset=self.label_offset)
         ns = images.shape[0]
         mm = mm.reshape((ns, -1))
         x = mm[:]
@@ -174,7 +188,7 @@ class Classifier:
     def get_regularizer(self, scale=1.):
         return tf.contrib.layers.l2_regularizer(scale)
     
-    def dnet_block(self, x, nf, k, drate, is_training=True):
+    def dnet_block(self, x, nf, k, drate, is_training=True, droprate=0):
         
         h = tf.layers.conv2d(x, nf, k, strides=1,
                              padding='same', dilation_rate=drate,
@@ -182,45 +196,51 @@ class Classifier:
                              kernel_regularizer=self.get_regularizer(),
                              activation=None)
 
+        
         h = tf.nn.leaky_relu(h)
+
         if is_training:
-            h = tf.layers.dropout(h, rate=1)
+            h = tf.keras.layers.SpatialDropout2D(rate=droprate).apply(h)
+        
 
         h = tf.concat([x, h], -1)
         
         h1 = tf.layers.conv2d(h, nf, k, strides=1,
                              padding='same', dilation_rate=drate,
                              kernel_initializer=None,
+                             use_bias=False,
                              kernel_regularizer=self.get_regularizer(),
                              activation=None)
 
         h1 = tf.nn.leaky_relu(h1)
         if is_training:
-            h1 = tf.layers.dropout(h1, rate=1)
+            h1 = tf.keras.layers.SpatialDropout2D(rate=droprate).apply(h1)
 
         h = tf.concat([h, h1], -1)
 
-        h = tf.layers.conv2d(h, 3*nf, k, strides=2,
+        h = tf.layers.conv2d(h, nf, k, strides=2,
                              padding='same', dilation_rate=drate,
                              kernel_initializer=None,
                              kernel_regularizer=self.get_regularizer(),
+                             use_bias=False,
                              activation=None)
 
         if is_training:
-            h = tf.layers.dropout(h, rate=1)        
+            h = tf.keras.layers.SpatialDropout2D(rate=droprate).apply(h)     
         h = tf.nn.leaky_relu(h)
+
         return h
 
-    def create_network(self, batch, is_training=True):
+    def create_network(self, batch, is_training=True, droprate=0):
         ## just make a nice classification thing
         layers = list()
         layers.append(batch)
         ns = 8
-        h = self.dnet_block(batch, 8, 3, 1)
+        h = self.dnet_block(batch, 8, 3, 1, droprate=droprate)
         layers.append(h)
         #h = tf.concat(layers, -1, name='concat1')
 
-        h = self.dnet_block(h, 16, 3, 1)
+        h = self.dnet_block(h, 16, 3, 1, droprate=droprate)
         layers.append(h)
         #h = tf.concat(layers, -1, name='concat2')
 
@@ -231,28 +251,31 @@ class Classifier:
         #h = self.dnet_block(h, 128, 3, 1)
         #layers.append(h)
         #h = tf.concat(layers, -1, name='concat8')
-        #print(h)
+        print(h)
         h = tf.layers.flatten(h)
-        h = tf.layers.dense(h, 500)
-        h = tf.nn.leaky_relu(h)
+#         h = tf.layers.dense(h, 500,
+#                             kernel_regularizer=self.get_regularizer())
+#         h = tf.nn.leaky_relu(h)
 
-        h = tf.layers.dense(h, 100,
-                            kernel_regularizer=self.get_regularizer())
+#         h = tf.layers.dense(h, 100,
+#                             kernel_regularizer=self.get_regularizer())
         
-        h = tf.nn.leaky_relu(h)
+#         h = tf.nn.leaky_relu(h)
         
         h = tf.layers.dense(h, self.nclasses ,
+                            kernel_initializer=tf.constant_initializer(value=0.0),
+                            bias_initializer=tf.constant_initializer(value=1./self.nclasses),
                              kernel_regularizer=self.get_regularizer())        
         
         self.logits = h
         self.softmax = tf.nn.softmax(h)
 
-    def create_loss(self, labels):
+    def create_loss(self, labels, l2f=0):
         loss = tf.nn.softmax_cross_entropy_with_logits_v2(logits=self.logits, labels=labels)
-        loss = tf.reduce_sum(loss, axis=(-1))
+        loss = tf.reduce_mean(loss, axis=(-1))
         l2_loss = tf.losses.get_regularization_loss()
         #print("loss before reduction", loss)
-        self.loss = tf.reduce_mean(loss) + 4*l2_loss
+        self.loss = tf.reduce_mean(loss) + l2f*l2_loss
         self.l2_loss = l2_loss
         #print(self.loss)
 
@@ -261,7 +284,8 @@ class Classifier:
                                      name='adam_opt').minimize(self.loss)
 
     def create_placeholders(self):
-        self.image_batch = tf.placeholder(tf.float32, shape=(None, self.w, self.w, 3))
+        sizeC = self.images.shape[-1]
+        self.image_batch = tf.placeholder(tf.float32, shape=(None, self.w, self.w, sizeC))
         self.label_batch = tf.placeholder(tf.float32, shape=(None, self.nclasses))
         self.learning_rate = tf.placeholder(tf.float32, shape=())
         self.is_training = tf.placeholder(tf.bool, shape=())
@@ -272,16 +296,16 @@ class Classifier:
         p = tf.argmax(y, 1)
         p_ = tf.argmax(y_, 1)
         #print("##########", p, p_)
-        _, self.accuracy_score = tf.metrics.accuracy(p, p_)
-        _, self.precision = tf.metrics.precision(p, p_)
-        _, self.recall = tf.metrics.recall(p, p_)        
+        _, self.accuracy_score = tf.metrics.accuracy(p_, p)
+        _, self.precision = tf.metrics.precision(p_, p)
+        _, self.recall = tf.metrics.recall(p_, p)        
         self.confmat = tf.math.confusion_matrix(p_, p)
                                                     
-    def train(self, n_iter=10000, learning_rate=0.001):
+    def train(self, n_iter=10000, learning_rate=0.001, droprate=0, l2f=0):
         tf.reset_default_graph()
         self.create_placeholders()
-        self.create_network(self.image_batch, is_training=self.is_training)
-        self.create_loss(self.label_batch)
+        self.create_network(self.image_batch, is_training=self.is_training, droprate=droprate)
+        self.create_loss(self.label_batch, l2f=l2f)
         self.create_accuracy(self.softmax, self.label_batch)
         self.create_opt()
         print("***********************")
@@ -293,7 +317,7 @@ class Classifier:
         sess.run(xinit)
         #sess.run(tf.global_variables_initializer())
         tf.summary.scalar('loss', self.loss)
-#        tf.summary.scalar('accuracy', self.accuracy)
+        tf.summary.scalar('accuracy', self.accuracy)
         tf.summary.scalar('accuracy_score', self.accuracy_score)
         tf.summary.scalar('precision', self.precision)
         tf.summary.scalar('recall', self.recall)                 
@@ -314,8 +338,8 @@ class Classifier:
             if i % 100 == 0:
                 learning_rate -= .0002*learning_rate
                 #print('learning rate set to ', learning_rate)
-                
-            bx, by = self.get_balanced_batch(self.train_images,
+            if i >= 0:
+                bx, by = self.get_balanced_batch(self.train_images,
                                              self.train_labels,
                                              self.class_where_train, 128)
 
@@ -325,20 +349,20 @@ class Classifier:
                                         self.is_training:True})
             
             
-            if i % 2000 == 0:
+            if i % 100 == 0:
                 tb, tl = self.get_balanced_batch(self.test_images,
                                                  self.test_labels,
                                                  self.class_where_test,
                                                  128)
                 vl, vsm, vlb, vcm = sess.run([self.loss, self.softmax, self.label_batch, self.confmat],
-                              feed_dict={self.image_batch:tb,
-                                         self.label_batch:tl,
+                              feed_dict={self.image_batch:self.test_images,
+                                         self.label_batch:self.test_labels,
                                          self.is_training:False})
 
                 #a1 = np.argmax(vsm, axis=1)
                 #a2 = np.argmax(vlb, axis=1)
                 #ska = accuracy_score(a1, a2)
-                print(vcm)
+                #print(vcm)
                 
                 summary = sess.run(merged, feed_dict={self.image_batch:bx, self.label_batch:by,
                                                        self.is_training:False})
@@ -368,8 +392,12 @@ class Classifier:
 def test_err(x):
     print(x)
     
-def get_classifier(datafile, labelsfile, w, nc, cc):
-    c = Classifier(datafile, labelsfile, w, nc, cc)
+def get_classifier(datafile, labelsfile, w, nc, cc, offset=0, ow=65,
+                   channels=[1,2,3], dtype=np.float32, label_offset=0):
+    
+    c = Classifier(datafile, labelsfile, w, nc, cc, offset=offset,
+                   ow=ow, channels=channels, dtype=dtype,
+                   label_offset=label_offset)
     return c
 
 if __name__ == '__main__':
