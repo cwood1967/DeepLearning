@@ -376,7 +376,7 @@ class Classifier:
                                          self.class_where_test,
                                          1024)
 
-        vl, vsm, vlb, vcm = sess.run([self.loss, self.softmax, self.label_batch, self.confmat],
+        vl, _, _, vcm = sess.run([self.loss, self.softmax, self.label_batch, self.confmat],
                               feed_dict={self.image_batch:tb,
                                          self.label_batch:tl,
                                          self.is_training:False})
