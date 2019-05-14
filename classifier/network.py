@@ -94,7 +94,7 @@ class Classifier:
         n = self.images.shape[0] 
         ntrain = int(ptrain*n)
         ntest = int(ptest*n)
-        nval = n - ntrain - ntest
+        
         self.train_images = self.images[:ntrain]
         self.test_images = self.images[ntrain:ntrain + ntest]
         self.val_images = self.images[ntrain + ntest:]
@@ -235,7 +235,7 @@ class Classifier:
         ## just make a nice classification thing
         layers = list()
         layers.append(batch)
-        ns = 8
+        
         h = self.dnet_block(batch, 8, 3, 1, droprate=droprate)
         layers.append(h)
         #h = tf.concat(layers, -1, name='concat1')
@@ -332,7 +332,6 @@ class Classifier:
         merged = tf.summary.merge_all()
         train_writer = tf.summary.FileWriter('logs/train', sess.graph)
         test_writer = tf.summary.FileWriter('logs/test')
-        m_writer = tf.summary.FileWriter('logs/m')
         
         for i in range(n_iter):
             if i % 100 == 0:
@@ -354,15 +353,11 @@ class Classifier:
                                                  self.test_labels,
                                                  self.class_where_test,
                                                  128)
-                vl, vsm, vlb, vcm = sess.run([self.loss, self.softmax, self.label_batch, self.confmat],
+                vl, _, _, vcm = sess.run([self.loss, self.softmax, self.label_batch, self.confmat],
                               feed_dict={self.image_batch:self.test_images,
                                          self.label_batch:self.test_labels,
                                          self.is_training:False})
 
-                #a1 = np.argmax(vsm, axis=1)
-                #a2 = np.argmax(vlb, axis=1)
-                #ska = accuracy_score(a1, a2)
-                #print(vcm)
                 
                 summary = sess.run(merged, feed_dict={self.image_batch:bx, self.label_batch:by,
                                                        self.is_training:False})
