@@ -11,7 +11,7 @@ import os
 import shutil
 import sys
 import time
-import network
+from . import network
 
 import numpy as np
 from matplotlib import pyplot as plt
@@ -20,12 +20,11 @@ import sklearn.metrics as metrics
 
 #%%
 datafile = 'Data/cc_images.mm'
-labelsfile = 'Data/labels.mm'
-
+labelsfile = 'Data/new_labels.mm'
 
 #%%
-cc = [0,3,7]
-#cc = [0, 1, 2, 3, 4, 5, 6, 7, 8]
+#cc = [0,3,7]
+cc = [0, 1, 2, 3, 4, 5, 6]
 c = network.get_classifier(datafile, labelsfile, 32, 5, cc, channels=[0,1,3,4], ow=64)
 
 
@@ -42,8 +41,7 @@ while os.path.exists('logs'):
 
 
 #%%
-c.train(n_iter=20000, learning_rate=0.0003, droprate=0, l2f=.01)
-
+c.train(n_iter=40000, learning_rate=0.0003, droprate=0, l2f=.003, batchsize=256)
 
 #%%
 tb, tl = c.get_balanced_batch(c.val_images,

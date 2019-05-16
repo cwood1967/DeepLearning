@@ -253,8 +253,10 @@ class Classifier:
         #h = tf.concat(layers, -1, name='concat8')
         print(h)
         h = tf.layers.flatten(h)
-#         h = tf.layers.dense(h, 500,
-#                             kernel_regularizer=self.get_regularizer())
+        h = tf.layers.dense(h, 100,
+                            kernel_regularizer=self.get_regularizer(),
+                            kernel_initializer=tf.constant_initializer(value=1./100.),
+                            bias_initializer=tf.constant_initializer(value=0))
 #         h = tf.nn.leaky_relu(h)
 
 #         h = tf.layers.dense(h, 100,
@@ -301,7 +303,7 @@ class Classifier:
         _, self.recall = tf.metrics.recall(p_, p)        
         self.confmat = tf.math.confusion_matrix(p_, p)
                                                     
-    def train(self, n_iter=10000, learning_rate=0.001, droprate=0, l2f=0):
+    def train(self, n_iter=10000, learning_rate=0.001, droprate=0, l2f=0, batchsize=128):
         tf.reset_default_graph()
         self.create_placeholders()
         self.create_network(self.image_batch, is_training=self.is_training, droprate=droprate)
@@ -337,10 +339,13 @@ class Classifier:
             if i % 100 == 0:
                 learning_rate -= .0002*learning_rate
                 #print('learning rate set to ', learning_rate)
-            if i >= 0:
+            if i % 2 == 0:
                 bx, by = self.get_balanced_batch(self.train_images,
                                              self.train_labels,
-                                             self.class_where_train, 128)
+                                             self.class_where_train, batchsize)
+            else:
+                bx, by = self.get_batch(self.train_images,
+                                             self.train_labels, batchsize)
 
             _, xl = sess.run([self.opt, self.loss],
                              feed_dict={self.image_batch:bx, self.label_batch:by,
