@@ -25,6 +25,7 @@ class Classifier:
         self.label_offset = label_offset
         _images = self.readmm(datafile, w=ow)
         _labels = self.read_labels_mm(labelsfile, _images)
+        #np.random.shuffle(_labels)
         self.images, self.labels = self.permute_data_and_labels(_images, _labels)
 
         self.label_nums = np.argmax(self.labels, axis=1)        
