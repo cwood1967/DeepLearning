@@ -15,10 +15,10 @@ from matplotlib import pyplot as plt
 import sklearn.metrics as metrics
 
 datafile = 'Data/cc_images.mm'
-labelsfile = 'Data/new_labels.mm'
+labelsfile = 'Data/cc_6_labels.mm'
 
 #cc = [0,3,7]
-cc = [0, 1, 2, 3, 4, 5, 6]
+cc = [0, 1, 2, 3, 4, 5]
 c = network.get_classifier(datafile, labelsfile, 32, 5, cc, channels=[0,1,3,4], ow=64)
 
 try:
@@ -39,7 +39,7 @@ vl, vsm, vlb, vcm = c.sess.run([c.loss, c.softmax, c.label_batch, c.confmat],
                                  c.is_training:False})
 
 
-tl.shape, np.argmax(vsm, axis=-1).shape
+#tl.shape, np.argmax(vsm, axis=-1).shape
 tls = np.argmax(c.val_labels, axis=-1)
 vsms = np.argmax(vsm, axis=-1)
 
