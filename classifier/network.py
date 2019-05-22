@@ -218,8 +218,10 @@ class Classifier:
     def get_regularizer(self, scale=1.):
         return tf.contrib.layers.l2_regularizer(scale)
     
-    def dnet_block(self, x, nf, k, drate, is_training=True, droprate=0):
+    def dnet_block(self, x, nf, k, drate, is_training=None, droprate=0):
         
+        t1 = tf.Variable(True, dtype=tf.bool)
+        dropout = tf.keras.layers.SpatialDropout2D(rate=droprate)
         h = tf.layers.conv2d(x, nf, k, strides=1,
                              padding='same', dilation_rate=drate,
                              kernel_initializer=None,
@@ -229,12 +231,13 @@ class Classifier:
         
         h = tf.nn.leaky_relu(h)
 
-        if is_training:
-            h = tf.keras.layers.SpatialDropout2D(rate=droprate).apply(h)
+        h = tf.cond(tf.equal(is_training, t1),
+                    lambda : dropout.apply(h),
+                    lambda : h)
+        # if is_training:
+        #     h = tf.keras.layers.SpatialDropout2D(rate=droprate).apply(h)
         
-
         h = tf.concat([x, h], -1)
-        
         h1 = tf.layers.conv2d(h, nf, k, strides=1,
                              padding='same', dilation_rate=drate,
                              kernel_initializer=None,
@@ -243,8 +246,13 @@ class Classifier:
                              activation=None)
 
         h1 = tf.nn.leaky_relu(h1)
-        if is_training:
-            h1 = tf.keras.layers.SpatialDropout2D(rate=droprate).apply(h1)
+
+        h1 = tf.cond(tf.equal(is_training, t1),
+                    lambda : dropout.apply(h1),
+                    lambda : h1)
+
+        # if is_training:
+        #     h1 = tf.keras.layers.SpatialDropout2D(rate=droprate).apply(h1)
 
         h = tf.concat([h, h1], -1)
 
@@ -255,27 +263,37 @@ class Classifier:
                              use_bias=False,
                              activation=None)
 
-        if is_training:
-            h = tf.keras.layers.SpatialDropout2D(rate=droprate).apply(h)     
+        h = tf.cond(tf.equal(is_training, t1),
+                    lambda : dropout.apply(h),
+                    lambda : h)
+        # if is_training:
+        #     h = tf.keras.layers.SpatialDropout2D(rate=droprate).apply(h)     
         h = tf.nn.leaky_relu(h)
 
         return h
 
-    def create_network(self, batch, is_training=True, droprate=0):
+    def create_network(self, batch, is_training, droprate=0):
+        
+        t = tf.Variable(True, tf.bool)
+        f = tf.Variable(False, tf.bool)
+        training = tf.cond(tf.equal(is_training, t), lambda : t, lambda: f)
         ## just make a nice classification thing
         layers = list()
         layers.append(batch)
         
-        h = self.dnet_block(batch, 8, 3, 1, droprate=droprate)
+        h = self.dnet_block(batch, 8, 3, 1, is_training=training, droprate=droprate)
         layers.append(h)
         #h = tf.concat(layers, -1, name='concat1')
 
-        h = self.dnet_block(h, 16, 3, 1, droprate=droprate)
+        h = self.dnet_block(h, 16, 3, 1, is_training=training, droprate=droprate)
         layers.append(h)
         #h = tf.concat(layers, -1, name='concat2')
 
-        h = self.dnet_block(h, 32, 3, 1)
+        h = self.dnet_block(h, 32, 3, 1, is_training=training, droprate=droprate)
         layers.append(h)
+
+        #h = self.dnet_block(h, 64, 3, 1, is_training=training, droprate=droprate)
+        #layers.append(h)
         #h = tf.concat(layers, -1, name='concat4')
 
         #h = self.dnet_block(h, 128, 3, 1)
@@ -283,16 +301,15 @@ class Classifier:
         #h = tf.concat(layers, -1, name='concat8')
         print(h)
         h = tf.layers.flatten(h)
-        h = tf.layers.dense(h, 100,
+        h = tf.layers.dense(h, 800,
                             kernel_regularizer=self.get_regularizer(),
                             kernel_initializer=tf.constant_initializer(value=1./100.),
                             bias_initializer=tf.constant_initializer(value=0))
-#         h = tf.nn.leaky_relu(h)
+        h = tf.nn.leaky_relu(h)
 
-#         h = tf.layers.dense(h, 100,
-#                             kernel_regularizer=self.get_regularizer())
-        
-#         h = tf.nn.leaky_relu(h)
+        h = tf.layers.dense(h, 100,
+                            kernel_regularizer=self.get_regularizer())       
+        h = tf.nn.leaky_relu(h)
         
         h = tf.layers.dense(h, self.nclasses ,
                             kernel_initializer=tf.constant_initializer(value=0.0),
@@ -377,7 +394,7 @@ class Classifier:
                 bx, by = self.get_batch(self.train_images,
                                              self.train_labels, batchsize)
 
-            _, xl = sess.run([self.opt, self.loss],
+            _, xl, summary = sess.run([self.opt, self.loss, merged],
                              feed_dict={self.image_batch:bx, self.label_batch:by,
                                         self.learning_rate:learning_rate,
                                         self.is_training:True})
@@ -387,20 +404,20 @@ class Classifier:
                 tb, tl = self.get_balanced_batch(self.test_images,
                                                  self.test_labels,
                                                  self.class_where_test,
-                                                 128)
-                vl, _, _, vcm = sess.run([self.loss, self.softmax, self.label_batch, self.confmat],
-                              feed_dict={self.image_batch:self.test_images,
-                                         self.label_batch:self.test_labels,
+                                                 512)
+                vl, _, _, vcm, test_summary = sess.run([self.loss, self.softmax, self.label_batch, self.confmat, merged],
+                              feed_dict={self.image_batch:tb,
+                                         self.label_batch:tl,
                                          self.is_training:False})
-
-                
-                summary = sess.run(merged, feed_dict={self.image_batch:bx, self.label_batch:by,
-                                                       self.is_training:False})
-                
-                test_summary = sess.run(merged, feed_dict={self.image_batch:tb,
-                                                           self.label_batch:tl, self.is_training:False})
-            if i % 100 == 0:
+        
+                # test_summary = sess.run(merged, feed_dict={self.image_batch:tb,
+                #                                            self.label_batch:tl, self.is_training:False})
+            if i % 10 == 0:
                 train_writer.add_summary(summary, i)
+                # summary = sess.run(merged, feed_dict={self.image_batch:bx, self.label_batch:by,
+                #                     self.is_training:False})
+                
+            if i % 100 == 0:
                 test_writer.add_summary(test_summary, i)                
             if i % 1000 == 0:
                 print(i, xl, vl)

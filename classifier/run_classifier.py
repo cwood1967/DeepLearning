@@ -31,8 +31,8 @@ time.sleep(4)
 while os.path.exists('logs'):
     time.sleep(.1)
 
-c.train(n_iter=25000, learning_rate=0.0003, droprate=0, l2f=.003,
-        batchsize=128)
+c.train(n_iter=25000, learning_rate=0.0006, droprate=0.0, l2f=.001,
+        batchsize=256)
 
 # run all validation images
 vl, vsm, vlb, vcm = c.sess.run([c.loss, c.softmax, c.label_batch, c.confmat],
