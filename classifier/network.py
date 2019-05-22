@@ -12,7 +12,8 @@ from sklearn.metrics import accuracy_score
 class Classifier:
     def __init__(self, datafile, labelsfile, w, nc, cnums,
                  offset=0, ow = 64, channels=[1,2,3],
-                dtype=np.float32, label_offset=0):
+                dtype=np.float32, label_offset=0,
+                combine=None):
 
         self.ow = ow
         self.w = w
@@ -25,6 +26,15 @@ class Classifier:
         self.label_offset = label_offset
         _images = self.readmm(datafile, w=ow)
         _labels = self.read_labels_mm(labelsfile, _images)
+
+        if combine is not None:
+            for b in combine:
+                _labels = self.combine_channels(b[0], b[1], _labels)
+
+        print(_labels.shape, _labels.argmax(axis=1))
+        self.orig_images = _images.copy()
+        self.orig_labels = _labels.copy()
+        
         #np.random.shuffle(_labels)
         self.images, self.labels = self.permute_data_and_labels(_images, _labels)
 
@@ -32,6 +42,8 @@ class Classifier:
 
         cilist = list()
         cllist = list()
+
+        print(self.labels.shape)
         #cnums = [0, 1, 6,  7]
         print("reducing classes")
         for i, c in enumerate(cnums):
@@ -56,6 +68,23 @@ class Classifier:
         self.nclusters = self.label_nums.max() + 1
         self.set_ttv(.8, .1, .1)
         #print(self.test_images.shape)
+
+    def combine_channels(self, c1, c2, labels):
+        nc = labels.shape[1]
+        v1 = np.zeros((nc,), dtype=np.float32)
+        v2 = np.zeros((nc,), dtype=np.float32)
+
+        v1[c1] = 1.
+        v2[c2] = 1.
+        cx = labels.argmax(axis=1)
+
+        wx1 = np.where(cx == c1)
+        wx2 = np.where(cx == c2)
+        new_labels = labels.copy()
+        new_labels[wx2] = v1
+        new_labels = np.delete(new_labels, c2, 1)
+
+        return new_labels
 
     def readmm(self, datafile, w=64, nc=5):
         mm = np.memmap(datafile, dtype=np.float32, offset=self.offset)
@@ -394,11 +423,12 @@ def test_err(x):
     print(x)
     
 def get_classifier(datafile, labelsfile, w, nc, cc, offset=0, ow=65,
-                   channels=[1,2,3], dtype=np.float32, label_offset=0):
+                   channels=[1,2,3], dtype=np.float32, label_offset=0,
+                   combine=None):
     
     c = Classifier(datafile, labelsfile, w, nc, cc, offset=offset,
                    ow=ow, channels=channels, dtype=dtype,
-                   label_offset=label_offset)
+                   label_offset=label_offset, combine=combine)
     return c
 
 if __name__ == '__main__':

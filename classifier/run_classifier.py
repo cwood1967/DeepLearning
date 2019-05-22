@@ -15,11 +15,12 @@ from matplotlib import pyplot as plt
 import sklearn.metrics as metrics
 
 datafile = 'Data/cc_images.mm'
-labelsfile = 'Data/cc_6_labels.mm'
+labelsfile = 'Data/labels.mm'
 
 #cc = [0,3,7]
-cc = [0, 1, 2, 3, 4, 5]
-c = network.get_classifier(datafile, labelsfile, 32, 5, cc, channels=[0,1,3,4], ow=64)
+cc = [0, 1, 2, 3, 4, 5, 6]
+c = network.get_classifier(datafile, labelsfile, 32, 5, cc, channels=[0,1,3,4],
+                          ow=64, combine=[[0, 8], [4, 7]])
 
 try:
     shutil.rmtree('logs')
@@ -30,7 +31,8 @@ time.sleep(4)
 while os.path.exists('logs'):
     time.sleep(.1)
 
-c.train(n_iter=40000, learning_rate=0.0006, droprate=0, l2f=.003, batchsize=128)
+c.train(n_iter=25000, learning_rate=0.0003, droprate=0, l2f=.003,
+        batchsize=128)
 
 # run all validation images
 vl, vsm, vlb, vcm = c.sess.run([c.loss, c.softmax, c.label_batch, c.confmat],
@@ -61,13 +63,27 @@ print(cm.sum())
 print()
 print(metrics.confusion_matrix(tls, vsms))
 
+all_images = c.orig_images
+all_labels = c.orig_labels
+
+xm = all_images.mean(axis=(1,2), keepdims=True)
+sm = all_images.std(axis=(1,2), keepdims=True)
+all_images = (all_images - xm)/sm
+
 all_loss, all_sm, _, _ = c.sess.run([c.loss, c.softmax, c.label_batch, c.confmat],
-                      feed_dict={c.image_batch:c.images,
-                                 c.label_batch:c.labels,
+                      feed_dict={c.image_batch:all_images,
+                                 c.label_batch:all_labels,
                                  c.is_training:False})
 
 
-#%%
+
+np.set_printoptions(precision=3)
+print(metrics.classification_report(all_labels.argmax(axis=-1), all_sm.argmax(axis=-1)))
+print(metrics.accuracy_score(all_labels.argmax(axis=-1), all_sm.argmax(axis=-1)))
+cm = metrics.confusion_matrix(all_labels.argmax(axis=-1), all_sm.argmax(axis=-1))
+
+print(cm)
+
 np.save('Data/all_pickle.pkl', all_sm)
 
 
