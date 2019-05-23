@@ -220,20 +220,20 @@ class Classifier:
     
     def dnet_block(self, x, nf, k, drate, is_training=None, droprate=0):
         
-        t1 = tf.Variable(True, dtype=tf.bool)
-        dropout = tf.keras.layers.SpatialDropout2D(rate=droprate)
+        # t1 = tf.Variable(True, dtype=tf.bool)
+        # dropout = tf.keras.layers.SpatialDropout2D(rate=droprate)
         h = tf.layers.conv2d(x, nf, k, strides=1,
                              padding='same', dilation_rate=drate,
                              kernel_initializer=None,
                              kernel_regularizer=self.get_regularizer(),
                              activation=None)
 
-        
+        #h = tf.layers.BatchNormalization(momentum=0.99)(h, training=is_training)
         h = tf.nn.leaky_relu(h)
 
-        h = tf.cond(tf.equal(is_training, t1),
-                    lambda : dropout.apply(h),
-                    lambda : h)
+        # h = tf.cond(tf.equal(is_training, t1),
+        #             lambda : dropout.apply(h),
+        #             lambda : h)
         # if is_training:
         #     h = tf.keras.layers.SpatialDropout2D(rate=droprate).apply(h)
         
@@ -245,11 +245,12 @@ class Classifier:
                              kernel_regularizer=self.get_regularizer(),
                              activation=None)
 
+        #h1 = tf.layers.BatchNormalization(momentum=0.99)(h1, training=is_training)
         h1 = tf.nn.leaky_relu(h1)
 
-        h1 = tf.cond(tf.equal(is_training, t1),
-                    lambda : dropout.apply(h1),
-                    lambda : h1)
+        # h1 = tf.cond(tf.equal(is_training, t1),
+        #             lambda : dropout.apply(h1),
+        #             lambda : h1)
 
         # if is_training:
         #     h1 = tf.keras.layers.SpatialDropout2D(rate=droprate).apply(h1)
@@ -263,9 +264,10 @@ class Classifier:
                              use_bias=False,
                              activation=None)
 
-        h = tf.cond(tf.equal(is_training, t1),
-                    lambda : dropout.apply(h),
-                    lambda : h)
+        #h = tf.layers.BatchNormalization(momentum=0.99)(h, training=is_training)
+        # h = tf.cond(tf.equal(is_training, t1),
+        #             lambda : dropout.apply(h),
+        #             lambda : h)
         # if is_training:
         #     h = tf.keras.layers.SpatialDropout2D(rate=droprate).apply(h)     
         h = tf.nn.leaky_relu(h)
@@ -274,22 +276,19 @@ class Classifier:
 
     def create_network(self, batch, is_training, droprate=0):
         
-        t = tf.Variable(True, tf.bool)
-        f = tf.Variable(False, tf.bool)
-        training = tf.cond(tf.equal(is_training, t), lambda : t, lambda: f)
         ## just make a nice classification thing
         layers = list()
         layers.append(batch)
         
-        h = self.dnet_block(batch, 8, 3, 1, is_training=training, droprate=droprate)
+        h = self.dnet_block(batch, 8, 3, 1, is_training=is_training, droprate=droprate)
         layers.append(h)
         #h = tf.concat(layers, -1, name='concat1')
 
-        h = self.dnet_block(h, 16, 3, 1, is_training=training, droprate=droprate)
+        h = self.dnet_block(h, 16, 3, 1, is_training=is_training, droprate=droprate)
         layers.append(h)
         #h = tf.concat(layers, -1, name='concat2')
 
-        h = self.dnet_block(h, 32, 3, 1, is_training=training, droprate=droprate)
+        h = self.dnet_block(h, 32, 3, 1, is_training=is_training, droprate=droprate)
         layers.append(h)
 
         #h = self.dnet_block(h, 64, 3, 1, is_training=training, droprate=droprate)
@@ -305,10 +304,12 @@ class Classifier:
                             kernel_regularizer=self.get_regularizer(),
                             kernel_initializer=tf.constant_initializer(value=1./100.),
                             bias_initializer=tf.constant_initializer(value=0))
+        #h = tf.layers.BatchNormalization(momentum=0.99)(h, training=is_training)
         h = tf.nn.leaky_relu(h)
 
         h = tf.layers.dense(h, 100,
-                            kernel_regularizer=self.get_regularizer())       
+                            kernel_regularizer=self.get_regularizer())
+        #h = tf.layers.BatchNormalization(momentum=0.99)(h, training=is_training)       
         h = tf.nn.leaky_relu(h)
         
         h = tf.layers.dense(h, self.nclasses ,
@@ -328,9 +329,12 @@ class Classifier:
         self.l2_loss = l2_loss
         #print(self.loss)
 
-    def create_opt(self):
-        self.opt = tf.train.AdamOptimizer(learning_rate=self.learning_rate,
-                                     name='adam_opt').minimize(self.loss)
+    def create_opt(self):       
+        optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate,
+                                     name='adam_opt')
+        extra_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+        with tf.control_dependencies(extra_ops):
+            self.opt = optimizer.minimize(self.loss)
 
     def create_placeholders(self):
         sizeC = self.images.shape[-1]

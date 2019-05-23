@@ -31,7 +31,7 @@ time.sleep(4)
 while os.path.exists('logs'):
     time.sleep(.1)
 
-c.train(n_iter=25000, learning_rate=0.0006, droprate=0.0, l2f=.001,
+c.train(n_iter=25000, learning_rate=0.0006, droprate=0.0, l2f=.004,
         batchsize=256)
 
 # run all validation images
