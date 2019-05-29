@@ -378,7 +378,7 @@ class Classifier:
         tf.summary.histogram('logits', self.softmax)
         tf.summary.histogram('clusters', tf.argmax(self.softmax, 1))
         tf.summary.histogram('truth', tf.argmax(self.label_batch, 1))
-        tf.summary.image('image', self.image_batch)
+        #tf.summary.image('image', self.image_batch)
         #print(tf.reduce_mean(self.softmax, axis=-1))
         #print(tf.reduce_mean(self.softmax, axis=0))        
 

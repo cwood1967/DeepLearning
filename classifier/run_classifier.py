@@ -19,7 +19,7 @@ labelsfile = 'Data/labels.mm'
 
 #cc = [0,3,7]
 cc = [0, 1, 2, 3, 4, 5, 6]
-c = network.get_classifier(datafile, labelsfile, 32, 5, cc, channels=[0,1,3,4],
+c = network.get_classifier(datafile, labelsfile, 32, 5, cc, channels=[0, 1, 2 ,4],
                           ow=64, combine=[[0, 8], [4, 7]])
 
 try:
