@@ -2,6 +2,7 @@ import os
 import sys
 import argparse
 import time
+from datetime import datetime
 
 import numpy as np
 import pandas as pd
@@ -29,7 +30,7 @@ class Classifier:
 
         if combine is not None:
             for b in combine:
-                _labels = self.combine_channels(b[0], b[1], _labels)
+                _labels = self.combine_classes(b[0], b[1], _labels)
 
         print(_labels.shape, _labels.argmax(axis=1))
         self.orig_images = _images.copy()
@@ -64,12 +65,14 @@ class Classifier:
         
         self.label_nums = np.argmax(self.labels, axis=1)        
         self.normalize()
+        print('Done normalzing')
         self.nclasses = self.labels.shape[1]
         self.nclusters = self.label_nums.max() + 1
         self.set_ttv(.8, .1, .1)
+        print('ok to train')
         #print(self.test_images.shape)
 
-    def combine_channels(self, c1, c2, labels):
+    def combine_classes(self, c1, c2, labels):
         nc = labels.shape[1]
         v1 = np.zeros((nc,), dtype=np.float32)
         v2 = np.zeros((nc,), dtype=np.float32)
@@ -91,12 +94,14 @@ class Classifier:
         mm = mm.reshape((-1, self.ow, self.ow, self.nc))
         crop0 = (self.ow - self.w)//2
         crop1 = (crop0 + self.w)
+        print(mm.shape)
         if self.channels == -1:
             x = mm[:,crop0:crop1, crop0:crop1, :]
             x# = np.expand_dims(x, -1)
         else:
             x = mm[:,crop0:crop1, crop0:crop1, self.channels]
         del mm
+        print(x.shape)
         return x 
 
     def read_labels_mm(self, labelsfile, images):
@@ -105,13 +110,14 @@ class Classifier:
         mm = mm.reshape((ns, -1))
         x = mm[:]
         del mm
-
+        print(x.shape)
         return x
 
     def normalize(self, type=0):
         xm = self.images.mean(axis=(1,2), keepdims=True)
         sm = self.images.std(axis=(1,2), keepdims=True)
         self.images = (self.images - xm)/sm
+        print(sm.sum(axis=0), self.images.min(), self.images.max())
 
     def permute_data_and_labels(self, data, labels):
         n = data.shape[0]
@@ -228,15 +234,8 @@ class Classifier:
                              kernel_regularizer=self.get_regularizer(),
                              activation=None)
 
-        #h = tf.layers.BatchNormalization(momentum=0.99)(h, training=is_training)
         h = tf.nn.leaky_relu(h)
 
-        # h = tf.cond(tf.equal(is_training, t1),
-        #             lambda : dropout.apply(h),
-        #             lambda : h)
-        # if is_training:
-        #     h = tf.keras.layers.SpatialDropout2D(rate=droprate).apply(h)
-        
         h = tf.concat([x, h], -1)
         h1 = tf.layers.conv2d(h, nf, k, strides=1,
                              padding='same', dilation_rate=drate,
@@ -248,13 +247,6 @@ class Classifier:
         #h1 = tf.layers.BatchNormalization(momentum=0.99)(h1, training=is_training)
         h1 = tf.nn.leaky_relu(h1)
 
-        # h1 = tf.cond(tf.equal(is_training, t1),
-        #             lambda : dropout.apply(h1),
-        #             lambda : h1)
-
-        # if is_training:
-        #     h1 = tf.keras.layers.SpatialDropout2D(rate=droprate).apply(h1)
-
         h = tf.concat([h, h1], -1)
 
         h = tf.layers.conv2d(h, nf, k, strides=2,
@@ -264,12 +256,6 @@ class Classifier:
                              use_bias=False,
                              activation=None)
 
-        #h = tf.layers.BatchNormalization(momentum=0.99)(h, training=is_training)
-        # h = tf.cond(tf.equal(is_training, t1),
-        #             lambda : dropout.apply(h),
-        #             lambda : h)
-        # if is_training:
-        #     h = tf.keras.layers.SpatialDropout2D(rate=droprate).apply(h)     
         h = tf.nn.leaky_relu(h)
 
         return h
@@ -291,8 +277,8 @@ class Classifier:
         h = self.dnet_block(h, 32, 3, 1, is_training=is_training, droprate=droprate)
         layers.append(h)
 
-        #h = self.dnet_block(h, 64, 3, 1, is_training=training, droprate=droprate)
-        #layers.append(h)
+        h = self.dnet_block(h, 64, 3, 1, is_training=is_training, droprate=droprate)
+        layers.append(h)
         #h = tf.concat(layers, -1, name='concat4')
 
         #h = self.dnet_block(h, 128, 3, 1)
@@ -302,13 +288,16 @@ class Classifier:
         h = tf.layers.flatten(h)
         h = tf.layers.dense(h, 800,
                             kernel_regularizer=self.get_regularizer(),
-                            kernel_initializer=tf.constant_initializer(value=1./100.),
+                            kernel_initializer=None,
                             bias_initializer=tf.constant_initializer(value=0))
         #h = tf.layers.BatchNormalization(momentum=0.99)(h, training=is_training)
         h = tf.nn.leaky_relu(h)
 
         h = tf.layers.dense(h, 100,
+                            kernel_initializer=None,
+                            bias_initializer=tf.constant_initializer(value=0),
                             kernel_regularizer=self.get_regularizer())
+
         #h = tf.layers.BatchNormalization(momentum=0.99)(h, training=is_training)       
         h = tf.nn.leaky_relu(h)
         
@@ -374,18 +363,19 @@ class Classifier:
         tf.summary.scalar('accuracy_score', self.accuracy_score)
         tf.summary.scalar('precision', self.precision)
         tf.summary.scalar('recall', self.recall)                 
- #       tf.summary.scalar('zl2 loss', self.l2_loss)
         tf.summary.histogram('logits', self.softmax)
         tf.summary.histogram('clusters', tf.argmax(self.softmax, 1))
         tf.summary.histogram('truth', tf.argmax(self.label_batch, 1))
-        #tf.summary.image('image', self.image_batch)
-        #print(tf.reduce_mean(self.softmax, axis=-1))
-        #print(tf.reduce_mean(self.softmax, axis=0))        
 
         merged = tf.summary.merge_all()
-        train_writer = tf.summary.FileWriter('logs/train', sess.graph)
-        test_writer = tf.summary.FileWriter('logs/test')
+        train_writer = tf.summary.FileWriter('/scratch/cjw/logs/train',
+                                        sess.graph)
+        test_writer = tf.summary.FileWriter('/scratch/cjw/logs/test')
         
+        saver = tf.train.Saver()
+        dtnow = datetime.now().timetuple()
+        checkpoint_dir = 'Checkpoints'
+        cpstring = '{}/cp-{}-{:02d}-{:02d}-{:02d}-{:02d}/checkpoint'.format(checkpoint_dir, *dtnow[:5])
         for i in range(n_iter):
             if i % 100 == 0:
                 learning_rate -= .0002*learning_rate
@@ -425,8 +415,9 @@ class Classifier:
                 test_writer.add_summary(test_summary, i)                
             if i % 1000 == 0:
                 print(i, xl, vl)
-
+                saver.save(sess, cpstring, i)
         ''' run the final test'''
+        saver.save(sess, cpstring, i)
         tb, tl = self.get_balanced_batch(self.val_images,
                                          self.val_labels,
                                          self.class_where_test,

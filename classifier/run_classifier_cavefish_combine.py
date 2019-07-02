@@ -14,24 +14,27 @@ import numpy as np
 from matplotlib import pyplot as plt
 import sklearn.metrics as metrics
 
-datafile = '/home/cjw/Code/DeepLearning/classifier/Data/CaveFish/cavefish_images.mm'
-datafile = '/home/cjw/Code/DeepLearning/classifier/Data/CaveFish/cavefish_images.mm'
-labelsfile = '/home/cjw/Code/DeepLearning/classifier/Data/CaveFish/cavefish_labels.mm'
+datafile = '/home/cjw/Code/DeepLearning/classifier/Data/CaveFish/', \
+            'cavefish_images_combined.mm'
+
+labelsfile = '/home/cjw/Code/DeepLearning/classifier/Data/CaveFish/', \
+             'cavefish_labels_combined.mm'
 
 #cc = [0,3,7]
-cc = list(range(17))
+cc = list(range(7))
+
 c = network.get_classifier(datafile, labelsfile, 32, 3, cc, channels=[0,1,2],
                           ow=64, combine=None)
 
 try:
-    shutil.rmtree('logs')
+    shutil.rmtree('/scratch/cjw/logs')
     print('deleted logs')
 except:
     print("couldn't delete")
     
 time.sleep(4)
-while os.path.exists('logs'):
-    shutil.rmtree('logs')
+while os.path.exists('/scratch/cjw/logs'):
+    shutil.rmtree('/scratch/cjw/logs')
     time.sleep(.1)
 
 c.train(n_iter=25000, learning_rate=0.0006, droprate=0.0, l2f=.004,

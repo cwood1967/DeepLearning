@@ -3,6 +3,8 @@
 .DS_Store
 *.DS_Store
 Data
+Checkpoints
+Graphics
 logs
 .ipynb_checkpoints
 checkpoint*
