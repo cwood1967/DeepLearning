@@ -30,7 +30,7 @@ except:
     print("couldn't delete")
     
 time.sleep(4)
-while os.path.exists('logs'):
+while os.path.exists('`logs'):
     shutil.rmtree('logs')
     time.sleep(.1)
 

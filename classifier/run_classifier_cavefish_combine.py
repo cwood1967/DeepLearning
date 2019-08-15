@@ -14,12 +14,17 @@ import numpy as np
 from matplotlib import pyplot as plt
 import sklearn.metrics as metrics
 
-datafile = '/home/cjw/Code/DeepLearning/classifier/Data/CaveFish/', \
-            'cavefish_images_combined.mm'
+datafile = '/home/cjw/Code/DeepLearning/classifier/Data/CaveFish/'
+datafile += 'cavefish_images_combined.mm'
 
-labelsfile = '/home/cjw/Code/DeepLearning/classifier/Data/CaveFish/', \
-             'cavefish_labels_combined.mm'
 
+labelsfile = '/home/cjw/Code/DeepLearning/classifier/Data/CaveFish/'
+labelsfile += 'cavefish_labels_combined.mm'
+
+
+
+print(datafile)
+print(labelsfile)
 #cc = [0,3,7]
 cc = list(range(7))
 
@@ -38,7 +43,7 @@ while os.path.exists('/scratch/cjw/logs'):
     time.sleep(.1)
 
 c.train(n_iter=25000, learning_rate=0.0006, droprate=0.0, l2f=.004,
-        batchsize=256)
+        batchsize=256, checkpoint_dir='CaveFish/Checkpoints')
 
 # run all validation images
 vl, vsm, vlb, vcm = c.sess.run([c.loss, c.softmax, c.label_batch, c.confmat],
