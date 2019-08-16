@@ -23,7 +23,7 @@ params['combine'] = None
 params['tensorboard_log_dir'] = '/scratch/cjw/logs'
 params['channels'] = [0,2,4]
 
-params['iterations'] = 25000
+params['iterations'] = 12000
 params['learning_rate'] = 0.001 #0.0006
 params['droprate'] = 0.0
 params['l2f'] = 0.006 #0.004
