@@ -12,3 +12,4 @@ checkpoint*
 !.gitignore
 *~
 .vscode
+.svg
