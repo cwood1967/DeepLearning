@@ -23,14 +23,14 @@ params['combine'] = [[0, 8], [4, 7]]
 params['tensorboard_log_dir'] = '/scratch/cjw/logs'
 params['channels'] = [0,2,4]
 
-params['iterations'] = 25000
+params['iterations'] = 1 #25000
 params['learning_rate'] = 0.001 #0.0006
 params['droprate'] = 0.0
 params['l2f'] = 0.006 #0.004
 params['batchsize'] = 256
 
 ### Name of output checkpoint directory
-params['CheckpointDir'] = "Checkpoints/Snail_Redo_for_metrics_7_classes/"
+params['CheckpointDir'] = "Checkpoints/Just_to_see_size/"
 classifier_runner.run(params)
 
 print("Done")

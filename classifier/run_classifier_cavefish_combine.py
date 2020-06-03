@@ -43,7 +43,7 @@ while os.path.exists('/scratch/cjw/logs'):
     time.sleep(.1)
 
 c.train(n_iter=25000, learning_rate=0.0006, droprate=0.0, l2f=.004,
-        batchsize=256, checkpoint_dir='CaveFish/Checkpoints')
+        batchsize=256, checkpoint_dir='CaveFish_Combined_2020/Checkpoints')
 
 # run all validation images
 vl, vsm, vlb, vcm = c.sess.run([c.loss, c.softmax, c.label_batch, c.confmat],

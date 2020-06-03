@@ -307,6 +307,8 @@ class Classifier:
         #h = tf.layers.BatchNormalization(momentum=0.99)(h, training=is_training)
         h = tf.nn.leaky_relu(h)
 
+        print("!!!!! this is this size after last conv2d")
+        print(h)
         h = tf.layers.dense(h, 128,
                             kernel_initializer=None,
                             bias_initializer=tf.constant_initializer(value=0),

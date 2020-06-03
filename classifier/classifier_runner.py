@@ -31,6 +31,8 @@ def run(params):
         shutil.rmtree(params['tensorboard_log_dir'])
         time.sleep(.1)
 
+    if not os.path.exists(params['CheckpointDir']):
+        os.makedirs(params['CheckpointDir'])
     np.save(params['CheckpointDir'] + "validation_images.npy", c.val_images)
     np.save(params['CheckpointDir'] + "validation_labels.npy", c.val_labels)
     c.train(n_iter=params['iterations'], learning_rate=params['learning_rate'],
