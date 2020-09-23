@@ -228,37 +228,49 @@ class Classifier:
         
         # t1 = tf.Variable(True, dtype=tf.bool)
         # dropout = tf.keras.layers.SpatialDropout2D(rate=droprate)
+        ns = x.get_shape().as_list()[-1]
         h = tf.layers.conv2d(x, nf, k, strides=1,
                              padding='same', dilation_rate=drate,
                              kernel_initializer=None,
+                             use_bias=False,
                              kernel_regularizer=self.get_regularizer(),
                              activation=None)
 
         h = tf.nn.leaky_relu(h)
-
-        h = tf.concat([x, h], -1)
-        h1 = tf.layers.conv2d(h, nf, k, strides=1,
+        hc = tf.concat([x, h], -1)
+        
+        h1 = tf.layers.conv2d(hc, nf, k, strides=1,
                              padding='same', dilation_rate=drate,
                              kernel_initializer=None,
                              use_bias=False,
                              kernel_regularizer=self.get_regularizer(),
                              activation=None)
 
-        #h1 = tf.layers.BatchNormalization(momentum=0.99)(h1, training=is_training)
         h1 = tf.nn.leaky_relu(h1)
-
-        h = tf.concat([h, h1], -1)
-
-        h = tf.layers.conv2d(h, nf, k, strides=2,
+        h1c = tf.concat([hc, h1], -1)
+        
+        h2 = tf.layers.conv2d(h1c, nf, k, strides=1,
+                             padding='same', dilation_rate=drate,
+                             kernel_initializer=None,
+                             use_bias=False,
+                             kernel_regularizer=self.get_regularizer(),
+                             activation=None)
+        
+        h2 = tf.nn.leaky_relu(h2)
+        h2c = tf.concat([x, h, h1, h2], -1)
+        
+        ns = h2c.get_shape().as_list()[-1]
+        print("!!!!!!!!!     ", ns)
+        hf = tf.layers.conv2d(h2c, ns, k, strides=2,
                              padding='same', dilation_rate=drate,
                              kernel_initializer=None,
                              kernel_regularizer=self.get_regularizer(),
                              use_bias=False,
                              activation=None)
 
-        h = tf.nn.leaky_relu(h)
+        hf = tf.nn.leaky_relu(hf)
 
-        return h
+        return hf
 
     def create_network(self, batch, is_training, droprate=0):
         
@@ -266,19 +278,21 @@ class Classifier:
         layers = list()
         layers.append(batch)
         
-        h = self.dnet_block(batch, 8, 3, 1, is_training=is_training, droprate=droprate)
+        ### only using 2 layers - will go from 32 -16 - 8
+        ### sizes where 8-16-32-64
+        h = self.dnet_block(batch, 4, 3, 1, is_training=is_training, droprate=droprate)
         layers.append(h)
         #h = tf.concat(layers, -1, name='concat1')
 
-        h = self.dnet_block(h, 16, 3, 1, is_training=is_training, droprate=droprate)
+        h = self.dnet_block(h, 8, 3, 1, is_training=is_training, droprate=droprate)
         layers.append(h)
         #h = tf.concat(layers, -1, name='concat2')
 
-        h = self.dnet_block(h, 32, 3, 1, is_training=is_training, droprate=droprate)
+        h = self.dnet_block(h, 16, 3, 1, is_training=is_training, droprate=droprate)
         layers.append(h)
 
-        h = self.dnet_block(h, 64, 3, 1, is_training=is_training, droprate=droprate)
-        layers.append(h)
+        # h = self.dnet_block(h, 64, 3, 1, is_training=is_training, droprate=droprate)
+        # layers.append(h)
         #h = tf.concat(layers, -1, name='concat4')
 
         #h = self.dnet_block(h, 128, 3, 1)
@@ -286,14 +300,16 @@ class Classifier:
         #h = tf.concat(layers, -1, name='concat8')
         print(h)
         h = tf.layers.flatten(h)
-        h = tf.layers.dense(h, 800,
+        h = tf.layers.dense(h, 1024,
                             kernel_regularizer=self.get_regularizer(),
                             kernel_initializer=None,
                             bias_initializer=tf.constant_initializer(value=0))
         #h = tf.layers.BatchNormalization(momentum=0.99)(h, training=is_training)
         h = tf.nn.leaky_relu(h)
 
-        h = tf.layers.dense(h, 100,
+        print("!!!!! this is this size after last conv2d")
+        print(h)
+        h = tf.layers.dense(h, 128,
                             kernel_initializer=None,
                             bias_initializer=tf.constant_initializer(value=0),
                             kernel_regularizer=self.get_regularizer())
@@ -343,7 +359,8 @@ class Classifier:
         _, self.recall = tf.metrics.recall(p_, p)        
         self.confmat = tf.math.confusion_matrix(p_, p)
                                                     
-    def train(self, n_iter=10000, learning_rate=0.001, droprate=0, l2f=0, batchsize=128):
+    def train(self, n_iter=10000, learning_rate=0.001, droprate=0, l2f=0,
+              batchsize=128, checkpoint_dir='Checkpoints'):
         tf.reset_default_graph()
         self.create_placeholders()
         self.create_network(self.image_batch, is_training=self.is_training, droprate=droprate)
@@ -372,13 +389,25 @@ class Classifier:
                                         sess.graph)
         test_writer = tf.summary.FileWriter('/scratch/cjw/logs/test')
         
-        saver = tf.train.Saver()
+        saver = tf.train.Saver(max_to_keep=1)
+        best_saver = tf.train.Saver(max_to_keep=1)
         dtnow = datetime.now().timetuple()
-        checkpoint_dir = 'Checkpoints'
+        #checkpoint_dir = 'Checkpoints'
+        if not os.path.exists(checkpoint_dir):
+            try:
+                os.makedirs(checkpoint_dir)
+            except:
+                print("Can't make checkpoint directory")
+                checkpoint_dir = 'Checkpoints'
+                
         cpstring = '{}/cp-{}-{:02d}-{:02d}-{:02d}-{:02d}/checkpoint'.format(checkpoint_dir, *dtnow[:5])
+        beststring = '{}/best-{}-{:02d}-{:02d}-{:02d}-{:02d}/best-checkpoint'.format(checkpoint_dir, *dtnow[:5])
+        best_loss = 1.e6
+        best_acc = 0
         for i in range(n_iter):
             if i % 100 == 0:
-                learning_rate -= .0002*learning_rate
+                if learning_rate > 0.0004:
+                    learning_rate -= .01*learning_rate # .0002
                 #print('learning rate set to ', learning_rate)
             if i % 2 == 0:
                 bx, by = self.get_balanced_batch(self.train_images,
@@ -399,13 +428,18 @@ class Classifier:
                                                  self.test_labels,
                                                  self.class_where_test,
                                                  512)
-                vl, _, _, vcm, test_summary = sess.run([self.loss, self.softmax, self.label_batch, self.confmat, merged],
-                              feed_dict={self.image_batch:tb,
-                                         self.label_batch:tl,
-                                         self.is_training:False})
+                vl, vacc, _, _, vcm, test_summary = sess.run([self.loss, self.accuracy,
+                                                        self.softmax, self.label_batch,
+                                                        self.confmat, merged],
+                                                        feed_dict={self.image_batch:tb,
+                                                                    self.label_batch:tl,
+                                                                    self.is_training:False})
         
-                # test_summary = sess.run(merged, feed_dict={self.image_batch:tb,
-                #                                            self.label_batch:tl, self.is_training:False})
+                if vacc > best_acc:
+                    best_saver.save(sess, beststring, i)
+                    best_acc = vacc
+                    print("!!! Best accuracy: ", i, vacc, vl)
+                    
             if i % 10 == 0:
                 train_writer.add_summary(summary, i)
                 # summary = sess.run(merged, feed_dict={self.image_batch:bx, self.label_batch:by,
@@ -414,7 +448,7 @@ class Classifier:
             if i % 100 == 0:
                 test_writer.add_summary(test_summary, i)                
             if i % 1000 == 0:
-                print(i, xl, vl)
+                print(i, xl, vl, learning_rate)
                 saver.save(sess, cpstring, i)
         ''' run the final test'''
         saver.save(sess, cpstring, i)
@@ -437,7 +471,7 @@ def test_err(x):
 def get_classifier(datafile, labelsfile, w, nc, cc, offset=0, ow=65,
                    channels=[1,2,3], dtype=np.float32, label_offset=0,
                    combine=None):
-    
+    print(datafile)
     c = Classifier(datafile, labelsfile, w, nc, cc, offset=offset,
                    ow=ow, channels=channels, dtype=dtype,
                    label_offset=label_offset, combine=combine)
